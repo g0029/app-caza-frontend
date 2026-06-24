@@ -3,13 +3,17 @@ const {
   useMemo,
   useState
 } = React;
-const COTOS = ["Coto Sierra Norte", "Coto Valle del Roble"];
+
+// 1. CAMBIADO: Nuevos nombres de cotos
+const COTOS = ["Coto Nuevo", "Coto Viejo"];
+
 const STATUS_STYLE = {
   DISPONIBLE: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   ASIGNADO: "bg-amber-50 text-amber-800 ring-amber-200",
   USADO: "bg-slate-100 text-slate-700 ring-slate-200",
   BLOQUEADO: "bg-red-50 text-red-700 ring-red-200"
 };
+
 const initialDb = {
   usuarios: [{
     id: 1,
@@ -33,12 +37,15 @@ const initialDb = {
     rol: "admin",
     bloqueado: false
   }],
+  // 2. MODIFICADO: Ahora cada precinto tiene una propiedad 'coto' que define dónde es válido.
+  // En este ejemplo, los primeros 9 pertenecen a Coto Nuevo y los siguientes 9 a Coto Viejo.
   precintos: Array.from({
     length: 18
   }, (_, index) => ({
     id: index + 1,
     numero_precinto: `PCD-${String(index + 1).padStart(5, "0")}`,
-    estado: index < 2 ? "ASIGNADO" : index === 2 ? "USADO" : "DISPONIBLE"
+    estado: index < 2 ? "ASIGNADO" : index === 2 ? "USADO" : "DISPONIBLE",
+    coto: index < 9 ? COTOS[0] : COTOS[1] 
   })),
   asignaciones: [{
     id: 1,
@@ -280,8 +287,12 @@ function UserArea({ user, db, setDb }) {
   function requestSeal(event) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
-    const free = db.precintos.find(p => p.estado === "DISPONIBLE");
-    if (!free) return setMessage({ type: "error", text: "No quedan precintos disponibles." });
+    
+    // 2. MODIFICADO: Ahora busca un precinto DISPONIBLE que pertenezca ESPECÍFICAMENTE al coto seleccionado
+    const free = db.precintos.find(p => p.estado === "DISPONIBLE" && p.coto === pickup.coto);
+    
+    if (!free) return setMessage({ type: "error", text: `No quedan precintos disponibles para el ${pickup.coto}.` });
+    
     const fecha = new Date().toISOString();
     const assignment = {
       id: Date.now(),
@@ -297,12 +308,12 @@ function UserArea({ user, db, setDb }) {
       precintos: db.precintos.map(p => p.id === free.id ? { ...p, estado: "ASIGNADO" } : p),
       asignaciones: [assignment, ...db.asignaciones]
     };
-    setDb(log(next, `Precinto ${free.numero_precinto} asignado`));
+    setDb(log(next, `Precinto ${free.numero_precinto} asignado a ${pickup.coto}`));
     setPickup({ coto: COTOS[0], paraje: "" });
     setReturnNumber(free.numero_precinto);
     setMessage({
       type: "success",
-      text: `Precinto asignado: ${free.numero_precinto}`,
+      text: `Precinto asignado: ${free.numero_precinto} (${free.coto})`,
       details: { ...assignment, numero: free.numero_precinto }
     });
   }
@@ -503,6 +514,7 @@ function AdminArea({ user, db, setDb }) {
   const [tab, setTab] = useState("usuarios");
   const [search, setSearch] = useState("");
   const [newSeal, setNewSeal] = useState("");
+  const [newSealCoto, setNewSealCoto] = useState(COTOS[0]); // MODIFICADO: Estado para el coto al crear precinto
   const [newUser, setNewUser] = useState({ nombre: "", usuario: "", password: "", rol: "cazador" });
   
   const stats = useMemo(() => ({
@@ -547,13 +559,15 @@ function AdminArea({ user, db, setDb }) {
   function createSeal(event) {
     event.preventDefault();
     if (!newSeal.trim()) return;
+    // MODIFICADO: El nuevo precinto se guarda con su coto correspondiente seleccionado en el panel admin
     const item = {
       id: Date.now(),
       numero_precinto: newSeal.trim().toUpperCase(),
-      estado: "DISPONIBLE"
+      estado: "DISPONIBLE",
+      coto: newSealCoto
     };
     const next = { ...db, precintos: [item, ...db.precintos] };
-    setDb(addLog(next, `Precinto ${item.numero_precinto} creado`));
+    setDb(addLog(next, `Precinto ${item.numero_precinto} creado para ${item.coto}`));
     setNewSeal("");
   }
 
@@ -615,13 +629,20 @@ function AdminArea({ user, db, setDb }) {
     tab === "precintos" && React.createElement(Panel, { title: "Gestión de precintos" }, 
       React.createElement("form", { onSubmit: createSeal, className: "mb-5 flex flex-col gap-3 sm:flex-row" }, 
         React.createElement(Input, { placeholder: "Nuevo número de precinto", value: newSeal, onChange: setNewSeal }), 
+        // MODIFICADO: Select para asignar el coto del nuevo precinto que se está creando
+        React.createElement("select", {
+          value: newSealCoto,
+          onChange: e => setNewSealCoto(e.target.value),
+          className: "h-11 rounded border border-slate-300 px-3"
+        }, COTOS.map(c => React.createElement("option", { key: c, value: c }, c))),
         React.createElement("button", { className: "h-11 rounded bg-forest-700 px-5 font-bold text-white" }, "Crear / reponer stock")
       ), 
-      React.createElement(Table, { headers: ["Número", "Estado", "Asignación", "Acción"] }, 
+      React.createElement(Table, { headers: ["Número", "Coto asignado", "Estado", "Asignación cazador", "Acción"] }, 
         db.precintos.map(p => {
           const assignment = db.asignaciones.find(a => a.precinto === p.id && a.estado === "ASIGNADO");
           return React.createElement("tr", { key: p.id, className: "border-t border-slate-100" }, 
             React.createElement(Td, null, p.numero_precinto), 
+            React.createElement(Td, null, p.coto || "No especificado"), // Muestra el coto del precinto
             React.createElement(Td, null, React.createElement(Badge, { tone: p.estado }, p.estado)), 
             React.createElement(Td, null, assignment ? `${assignment.coto} · ${assignment.paraje}` : "Sin asignación activa"), 
             React.createElement(Td, null, React.createElement("button", {
@@ -709,7 +730,6 @@ function Segmented({ options, value, onChange }) {
   );
 }
 
-// CORREGIDO: quitamos un pequeño error tipográfico al final del objeto original
 function SealRow({ seal, assignment }) {
   return React.createElement("div", { className: "rounded border border-slate-200 p-3" }, 
     React.createElement("div", { className: "flex items-start justify-between gap-3" }, 
