@@ -841,16 +841,31 @@ function App() {
   const [db, setDbState] = useState(loadDb);
   const [user, setUser] = useState(null);
 
-  // Guarda en memoria local y además lo envía al backend en Render
+  // Guarda en la base de datos remota conservando la imagen para el Admin
   function setDb(next) {
-    // 1. Guardamos una copia con la FOTO REAL para enviarla al backend
-    const datosParaEnviar = JSON.stringify(next);
+    // 1. Enviamos el objeto COMPLETO (con la foto real en Base64) al backend
+    fetch("https://sistema-caza-backend.onrender.com/api/db", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(next)
+    })
+    .then(res => {
+      if (!res.ok) {
+        console.error("Error al guardar en el servidor remoto");
+      } else {
+        console.log("Sincronizado con éxito");
+      }
+    })
+    .catch(err => console.error("Error de red al conectar con el backend:", err));
 
-    // 2. Limpiamos la foto pesada del estado local para que la web vaya fluida
+    // 2. Para el almacenamiento interno del dispositivo del cazador, 
+    // limpiamos la foto para optimizar espacio y que la web no vaya lenta
     if (next.capturas && next.capturas.length > 0) {
       next.capturas = next.capturas.map(c => {
         if (c.imagen && c.imagen.includes('data:image')) {
-          return { ...c, imagen: 'Enviada por Email ✉️' };
+          return { ...c, imagen: 'Guardada en Base de Datos 💾' };
         }
         return c;
       });
@@ -858,22 +873,10 @@ function App() {
 
     setDbState(next);
     localStorage.setItem("precinto-db", JSON.stringify(next));
-
-    // 3. Enviamos los datos con la foto al servidor
-    fetch("https://sistema-caza-backend.onrender.com/api/db", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: datosParaEnviar
-    })
-    .then(res => {
-      if (!res.ok) console.error("Error al guardar en el servidor remoto");
-    })
-    .catch(err => console.error("Error de red al conectar con el backend:", err));
   }
 
   if (!user) return React.createElement(Login, { db: db, onLogin: setUser });
+  
   return user.rol === "admin" 
     ? React.createElement(AdminArea, { user: user, db: db, setDb: setDb }) 
     : React.createElement(UserArea, { user: user, db: db, setDb: setDb });
