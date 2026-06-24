@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Precinto Digital de Caza</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              forest: {
+                50: "#eef8f1",
+                100: "#d8efe0",
+                500: "#287947",
+                700: "#155c35",
+                900: "#0b3421"
+              },
+              field: "#f5f7f4",
+              ink: "#1f2a24"
+            },
+            boxShadow: {
+              soft: "0 14px 40px rgba(15, 23, 42, 0.10)"
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      body {
+        background: #f5f7f4;
+      }
+      * {
+        letter-spacing: 0;
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #c8d2cb;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body class="text-ink antialiased">
+    <div id="root"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
