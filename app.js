@@ -843,7 +843,10 @@ function App() {
 
   // Guarda en memoria local y además lo envía al backend en Render
   function setDb(next) {
-    // Antes de guardar en localStorage y estado web, limpiamos las fotos pesadas
+    // 1. Primero hacemos una copia de seguridad con la foto real para enviarla al servidor
+    const datosParaEnviar = JSON.stringify(next);
+
+    // 2. Después limpiamos la foto local para que el navegador del usuario no se sature
     if (next.capturas && next.capturas.length > 0) {
       next.capturas = next.capturas.map(c => {
         if (c.imagen && c.imagen.includes('data:image')) {
@@ -856,12 +859,13 @@ function App() {
     setDbState(next);
     localStorage.setItem("precinto-db", JSON.stringify(next));
 
+    // 3. Enviamos los DATOS REALES (con la foto) al backend
     fetch("https://sistema-caza-backend.onrender.com/api/db", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(next)
+      body: datosParaEnviar // <-- Enviamos la variable que sí conserva la imagen
     })
     .then(res => {
       if (!res.ok) console.error("Error al guardar en el servidor remoto");
@@ -870,10 +874,7 @@ function App() {
   }
 
   if (!user) return React.createElement(Login, { db: db, onLogin: setUser });
-  
-  return user.rol === "admin" 
-    ? React.createElement(AdminArea, { user: user, db: db, setDb: setDb }) 
-    : React.createElement(UserArea, { user: user, db: db, setDb: setDb });
+  return user.rol === "admin" ? React.createElement(AdminArea, { user: user, db: db, setDb: setDb }) : React.createElement(UserArea, { user: user, db: db, setDb: setDb });
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
