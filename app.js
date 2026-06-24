@@ -847,7 +847,7 @@ function setDb(next) {
   localStorage.setItem("precinto-db", JSON.stringify(next));
 
   // CAMBIADO: Ahora apunta a tu servidor real en internet (Render)
-  fetch("https://TU-SERVIDOR-DE-RENDER.onrender.com/api/db", {
+  fetch("https://sistema-caza-backend.onrender.com/api/db", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
