@@ -192,20 +192,74 @@ function Login({ db, onLogin }) {
   function submit(event) {
     event.preventDefault();
     
-    // Buscamos si el usuario y contraseña coinciden
+    // 1. Buscamos si el usuario y contraseña coinciden
     const found = db.usuarios.find(u => u.usuario === form.usuario && u.password === form.password);
     
     if (!found) return setError("Credenciales incorrectas.");
     if (found.bloqueado) return setError("El acceso de este usuario está bloqueado.");
     
-    // PERSISTENCIA: Guardamos el usuario con éxito en la memoria física del teléfono
+    // 2. PERSISTENCIA: Guardamos el usuario con éxito en la memoria del teléfono
     localStorage.setItem("usuario-sesion", JSON.stringify(found));
     
-    // Notificamos a la aplicación principal para cambiar de pantalla
+    // 3. Notificamos a la aplicación principal para cambiar de pantalla
     onLogin(found);
   }
 
-  // Recuerda que aquí continuaría tu return con el formulario de la interfaz visual...
+  return React.createElement("main", { className: "grid min-h-screen bg-field lg:grid-cols-[1fr_480px]" }, 
+    React.createElement("section", { className: "relative flex min-h-[42vh] items-end overflow-hidden bg-forest-900 p-6 text-white lg:min-h-screen lg:p-12" }, 
+      React.createElement("img", {
+        src: "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1600&q=80",
+        alt: "Bosque",
+        className: "absolute inset-0 h-full w-full object-cover opacity-38"
+      }), 
+      React.createElement("div", { className: "absolute inset-0 bg-gradient-to-t from-forest-900 via-forest-900/68 to-forest-900/20" }), 
+      React.createElement("div", { className: "relative max-w-2xl pb-3" }, 
+        React.createElement("p", { className: "mb-3 inline-flex items-center gap-2 rounded bg-white/12 px-3 py-1 text-sm font-semibold ring-1 ring-white/20" }, 
+          React.createElement(Icon, { name: "map-pin", className: "h-4 w-4" }), "Uso en campo y administración"
+        ), 
+        React.createElement("h2", { className: "max-w-2xl text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" }, "Precinto Digital de Caza"), 
+        React.createElement("p", { className: "mt-4 max-w-xl text-base text-white/82 sm:text-lg" }, "Asignación, devolución, captura y auditoría desde una interfaz rápida, trazable y preparada para móvil.")
+      )
+    ), 
+    React.createElement("section", { className: "flex items-center justify-center px-4 py-8 sm:px-8" }, 
+      React.createElement("form", { onSubmit: submit, className: "w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-soft" }, 
+        React.createElement("div", { className: "mb-7" }, 
+          React.createElement("div", { className: "mb-4 grid h-12 w-12 place-items-center rounded bg-forest-100 text-forest-700" }, 
+            React.createElement(Icon, { name: "fingerprint", className: "h-7 w-7" })
+          ), 
+          React.createElement("h1", { className: "text-2xl font-bold" }, "Acceso seguro"), 
+          React.createElement("p", { className: "mt-2 text-sm text-slate-600" }, "El rol se detecta automáticamente al iniciar sesión.")
+        ), 
+        React.createElement("label", { className: "mb-4 block" }, 
+          React.createElement("span", { className: "text-sm font-semibold" }, "Usuario"), 
+          React.createElement("input", {
+            value: form.usuario,
+            onChange: e => setForm({ ...form, usuario: e.target.value }),
+            className: "mt-2 h-12 w-full rounded border border-slate-300 px-3 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100",
+            autoComplete: "username"
+          })
+        ), 
+        React.createElement("label", { className: "mb-3 block" }, 
+          React.createElement("span", { className: "text-sm font-semibold" }, "Contraseña"), 
+          React.createElement("input", {
+            type: "password",
+            value: form.password,
+            onChange: e => setForm({ ...form, password: e.target.value }),
+            className: "mt-2 h-12 w-full rounded border border-slate-300 px-3 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100",
+            autoComplete: "current-password"
+          })
+        ), 
+        error && React.createElement("p", { className: "mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" }, error), 
+        React.createElement("div", { className: "mb-5 flex items-center justify-between text-sm" }, 
+          React.createElement("button", { type: "button", className: "font-semibold text-forest-700 hover:underline" }, "Recuperar contraseña"), 
+          React.createElement("span", { className: "text-slate-500" }, "ana/123 · admin/admin")
+        ), 
+        React.createElement("button", { className: "inline-flex h-12 w-full items-center justify-center gap-2 rounded bg-forest-700 px-4 font-bold text-white hover:bg-forest-900" }, 
+          React.createElement(Icon, { name: "log-in" }), "Entrar"
+        )
+      )
+    )
+  );
 }
   return React.createElement("main", { className: "grid min-h-screen bg-field lg:grid-cols-[1fr_480px]" }, 
     React.createElement("section", { className: "relative flex min-h-[42vh] items-end overflow-hidden bg-forest-900 p-6 text-white lg:min-h-screen lg:p-12" }, 
