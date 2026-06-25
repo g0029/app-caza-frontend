@@ -4,6 +4,35 @@ const {
   useState
 } = React;
 
+// NUEVO: Función nativa para comprimir imágenes antes de enviarlas al servidor
+function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      // Calculamos las nuevas dimensiones manteniendo la proporción original
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Exportamos de nuevo a Base64 pero comprimido en formato JPEG (mucho más ligero que PNG)
+      const resultadoBase64 = canvas.toDataURL('image/jpeg', quality);
+      resolve(resultadoBase64);
+    };
+  });
+}
+
 // 1. CAMBIADO: Nuevos nombres de cotos
 const COTOS = ["Coto Nuevo", "Coto Viejo"];
 
@@ -37,8 +66,6 @@ const initialDb = {
     rol: "admin",
     bloqueado: false
   }],
-  // 2. MODIFICADO: Ahora cada precinto tiene una propiedad 'coto' que define dónde es válido.
-  // En este ejemplo, los primeros 9 pertenecen a Coto Nuevo y los siguientes 9 a Coto Viejo.
   precintos: Array.from({
     length: 18
   }, (_, index) => ({
@@ -83,15 +110,13 @@ const initialDb = {
   }]
 };
 
-// MODIFICADO: Ahora carga los datos de forma síncrona desde tu servidor Node.js al arrancar
 function loadDb() {
   try {
     const xhr = new XMLHttpRequest();
-    // CAMBIADO: Ahora busca la base de datos inicial en internet (Render)
-    xhr.open("GET", "https://sistema-caza-backend.onrender.com/api/db", false);    xhr.send();
+    xhr.open("GET", "https://sistema-caza-backend.onrender.com/api/db", false);
+    xhr.send();
     if (xhr.status === 200) {
       const data = JSON.parse(xhr.responseText);
-      // Si el servidor devolvió un objeto vacío porque la base de datos está limpia, usamos initialDb
       return data && data.usuarios ? data : initialDb;
     }
   } catch (e) {
@@ -288,9 +313,7 @@ function UserArea({ user, db, setDb }) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
     
-    // 2. MODIFICADO: Ahora busca un precinto DISPONIBLE que pertenezca ESPECÍFICAMENTE al coto seleccionado
     const free = db.precintos.find(p => p.estado === "DISPONIBLE" && p.coto === pickup.coto);
-    
     if (!free) return setMessage({ type: "error", text: `No quedan precintos disponibles para el ${pickup.coto}.` });
     
     const fecha = new Date().toISOString();
@@ -333,10 +356,20 @@ function UserArea({ user, db, setDb }) {
     setMessage({ type: "success", text: `Precinto ${seal.numero_precinto} disponible de nuevo.` });
   }
 
-  function handleImage(file) {
+  // MODIFICADO: Ahora maneja la compresión de forma asíncrona antes de guardar la foto en el formulario
+  async function handleImage(file) {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setCapture(current => ({ ...current, imagen: reader.result }));
+    reader.onload = async () => {
+      const originalBase64 = reader.result;
+      console.log("Tamaño original:", originalBase64.length);
+      
+      // Comprimimos la imagen a un tamaño máximo de 1024px de ancho y al 70% de calidad JPEG
+      const base64Comprimida = await comprimirImagen(originalBase64, 1024, 0.7);
+      console.log("Tamaño comprimido:", base64Comprimida.length);
+      
+      setCapture(current => ({ ...current, imagen: base64Comprimida }));
+    };
     reader.readAsDataURL(file);
   }
 
@@ -350,7 +383,7 @@ function UserArea({ user, db, setDb }) {
       id: Date.now(),
       precinto: seal.id,
       usuario: user.id,
-      imagen: capture.imagen,
+      imagen: capture.imagen, // Aquí ya viaja la versión comprimida ligera
       observaciones: capture.observaciones,
       fecha: new Date().toISOString(),
       coto: assignment.coto,
@@ -462,7 +495,7 @@ function UserArea({ user, db, setDb }) {
           React.createElement("label", null, 
             React.createElement("span", { className: "text-sm font-semibold" }, "Observaciones"), 
             React.createElement("textarea", {
-              value: capture.observaciones,
+              value: capture.observations,
               onChange: e => setCapture({ ...capture, observaciones: e.target.value }),
               rows: "3",
               className: "mt-2 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100"
@@ -514,7 +547,7 @@ function AdminArea({ user, db, setDb }) {
   const [tab, setTab] = useState("usuarios");
   const [search, setSearch] = useState("");
   const [newSeal, setNewSeal] = useState("");
-  const [newSealCoto, setNewSealCoto] = useState(COTOS[0]); // MODIFICADO: Estado para el coto al crear precinto
+  const [newSealCoto, setNewSealCoto] = useState(COTOS[0]);
   const [newUser, setNewUser] = useState({ nombre: "", usuario: "", password: "", rol: "cazador" });
   
   const stats = useMemo(() => ({
@@ -559,7 +592,6 @@ function AdminArea({ user, db, setDb }) {
   function createSeal(event) {
     event.preventDefault();
     if (!newSeal.trim()) return;
-    // MODIFICADO: El nuevo precinto se guarda con su coto correspondiente seleccionado en el panel admin
     const item = {
       id: Date.now(),
       numero_precinto: newSeal.trim().toUpperCase(),
@@ -629,7 +661,6 @@ function AdminArea({ user, db, setDb }) {
     tab === "precintos" && React.createElement(Panel, { title: "Gestión de precintos" }, 
       React.createElement("form", { onSubmit: createSeal, className: "mb-5 flex flex-col gap-3 sm:flex-row" }, 
         React.createElement(Input, { placeholder: "Nuevo número de precinto", value: newSeal, onChange: setNewSeal }), 
-        // MODIFICADO: Select para asignar el coto del nuevo precinto que se está creando
         React.createElement("select", {
           value: newSealCoto,
           onChange: e => setNewSealCoto(e.target.value),
@@ -642,7 +673,7 @@ function AdminArea({ user, db, setDb }) {
           const assignment = db.asignaciones.find(a => a.precinto === p.id && a.estado === "ASIGNADO");
           return React.createElement("tr", { key: p.id, className: "border-t border-slate-100" }, 
             React.createElement(Td, null, p.numero_precinto), 
-            React.createElement(Td, null, p.coto || "No especificado"), // Muestra el coto del precinto
+            React.createElement(Td, null, p.coto || "No especificado"), 
             React.createElement(Td, null, React.createElement(Badge, { tone: p.estado }, p.estado)), 
             React.createElement(Td, null, assignment ? `${assignment.coto} · ${assignment.paraje}` : "Sin asignación activa"), 
             React.createElement(Td, null, React.createElement("button", {
@@ -841,9 +872,8 @@ function App() {
   const [db, setDbState] = useState(loadDb);
   const [user, setUser] = useState(null);
 
-  // Guarda en la base de datos remota conservando la imagen para el Admin
   function setDb(next) {
-    // 1. Enviamos el objeto COMPLETO (con la foto real en Base64) al backend
+    // 1. Enviamos el objeto COMPLETO (con la foto comprimida ligera) al backend de Render
     fetch("https://sistema-caza-backend.onrender.com/api/db", {
       method: "POST",
       headers: {
@@ -855,13 +885,13 @@ function App() {
       if (!res.ok) {
         console.error("Error al guardar en el servidor remoto");
       } else {
-        console.log("Sincronizado con éxito");
+        console.log("Sincronizado con éxito en la base de datos");
       }
     })
     .catch(err => console.error("Error de red al conectar con el backend:", err));
 
-    // 2. Para el almacenamiento interno del dispositivo del cazador, 
-    // limpiamos la foto para optimizar espacio y que la web no vaya lenta
+    // 2. Para el almacenamiento interno (localStorage), limpiamos la foto
+    // para optimizar el espacio físico del teléfono móvil del cazador
     if (next.capturas && next.capturas.length > 0) {
       next.capturas = next.capturas.map(c => {
         if (c.imagen && c.imagen.includes('data:image')) {
