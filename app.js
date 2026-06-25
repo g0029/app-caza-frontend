@@ -110,34 +110,7 @@ const initialDb = {
   }]
 };
 
-// MODIFICADO: loadDb adaptativo e inteligente para situaciones sin cobertura
-function loadDb() {
-  // 1. Si el cazador no tiene cobertura en este instante, evitamos bloquear el navegador.
-  // Cargamos inmediatamente la copia de seguridad guardada en el almacenamiento del teléfono.
-  if (!navigator.onLine) {
-    console.warn("📱 Iniciando en modo offline. Cargando datos del almacenamiento local.");
-    const local = localStorage.getItem("precinto-db");
-    return local ? JSON.parse(local) : initialDb;
-  }
 
-  // 2. Si el dispositivo está online, intentamos traer la última versión desde el servidor de Render
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", "https://sistema-caza-backend.onrender.com/api/db", false); 
-    xhr.send();
-    if (xhr.status === 200) {
-      const data = JSON.parse(xhr.responseText);
-      return data && data.usuarios ? data : initialDb;
-    }
-  } catch (e) {
-    // 3. Si ocurre un microcorte justo durante la petición o el backend no responde, 
-    // activamos el plan de contingencia usando el localStorage para que el cazador no se quede tirado.
-    console.error("No se pudo conectar al servidor backend, usando respaldo local", e);
-    const local = localStorage.getItem("precinto-db");
-    return local ? JSON.parse(local) : initialDb;
-  }
-  return initialDb;
-}
 
 const ICON_PATHS = {
   "shield-check": ["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z", "m9 12 2 2 4-5"],
@@ -883,50 +856,87 @@ function formatDate(value) {
 }
 
 function App() {
-  const [db, setDbState] = useState(loadDb);
+  // 1. Estados de la aplicación
+  const [db, setDbState] = useState(initialDb); // Empezamos con la base local por defecto
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true); // NUEVO: Estado de carga activado al arrancar
+  const [loadingMessage, setLoadingMessage] = useState("Cargando la aplicación..."); // Mensaje dinámico
 
-  // 1. ESCUCHADOR INTELIGENTE DE COBERTURA: Detecta de forma automática cuándo vuelve internet
+  // 2. NUEVO: useEffect asíncrono para inicializar la base de datos de forma limpia
+  useEffect(() => {
+    async function inicializarApp() {
+      // Caso A: Si el cazador está offline (sin cobertura), cargamos local al instante y quitamos la carga
+      if (!navigator.onLine) {
+        console.warn("📱 Iniciando en modo offline. Cargando copia local.");
+        const local = localStorage.getItem("precinto-db");
+        if (local) setDbState(JSON.parse(local));
+        setLoading(false);
+        return;
+      }
+
+      // Caso B: Si está online, intentamos conectar de forma asíncrona con el backend de Render
+      try {
+        setLoadingMessage("Conectando con el servidor seguro de Render... 📡");
+        
+        // Ponemos un temporizador para avisar si el servidor tarda en "despertar"
+        const timerAviso = setTimeout(() => {
+          setLoadingMessage("Despertando el servidor remoto... Esto puede tardar unos 40 segundos la primera vez ⏳");
+        }, 3500);
+
+        const respuesta = await fetch("https://sistema-caza-backend.onrender.com/api/db");
+        clearTimeout(timerAviso); // Si ya ha respondido, quitamos el aviso largo
+
+        if (respuesta.ok) {
+          const data = await respuesta.json();
+          if (data && data.usuarios) {
+            setDbState(data);
+            console.log("✅ Conexión con el servidor completada con éxito.");
+          }
+        } else {
+          throw new Error("Respuesta incorrecta del servidor");
+        }
+      } catch (error) {
+        // Caso C: Plan de contingencia si el servidor falla o hay microcortes
+        console.error("No se pudo conectar al servidor, usando respaldo local:", error);
+        const local = localStorage.getItem("precinto-db");
+        if (local) setDbState(JSON.parse(local));
+      } finally {
+        // En cualquier caso, una vez terminado el proceso, quitamos la pantalla de carga
+        setLoading(false);
+      }
+    }
+
+    inicializarApp();
+  }, []);
+
+  // 3. ESCUCHADOR INTELIGENTE DE COBERTURA: Sigue funcionando igual que antes
   useEffect(() => {
     function comprobarYSubir() {
       console.log("🌐 ¡Conexión recuperada! Comprobando capturas pendientes...");
-      
-      // Leemos lo que se quedó congelado en la memoria del teléfono móvil
       const localData = localStorage.getItem("precinto-db");
       if (localData) {
         const parsedData = JSON.parse(localData);
-        
-        // Buscamos si hay alguna captura que todavía conserve la foto Base64 real sin subir
         const tieneFotosPendientes = parsedData.capturas?.some(c => c.imagen && c.imagen.includes('data:image'));
-        
         if (tieneFotosPendientes) {
           console.log("📤 Subiendo automáticamente las capturas acumuladas sin señal...");
-          // Forzamos el envío invocando a setDb (como ahora estamos online, hará el fetch)
           setDb(parsedData);
         }
       }
     }
-
-    // Vinculamos el evento nativo del teléfono
     window.addEventListener('online', comprobarYSubir);
-    
-    // Limpieza al desmontar el componente
     return () => window.removeEventListener('online', comprobarYSubir);
   }, [db]);
 
-  // 2. FUNCIÓN SETDB MODIFICADA: Ahora gestiona el guardado adaptativo (online / offline)
+  // 4. FUNCIÓN SETDB: Sigue gestionando la sincronización perfectamente
   function setDb(next) {
-    // Actualizamos el estado de la interfaz React para que el justificante se pinte al momento
     setDbState(next);
 
-    // SI NO HAY INTERNET: Aseguramos los datos guardando el objeto con la FOTO REAL en el móvil
     if (!navigator.onLine) {
       console.warn("⚠️ Dispositivo offline. Conservando imagen en local hasta recuperar cobertura.");
       localStorage.setItem("precinto-db", JSON.stringify(next));
       return;
     }
 
-    // SI HAY INTERNET: Lanzamos la petición hacia el servidor de Render normalmente
     fetch("https://sistema-caza-backend.onrender.com/api/db", {
       method: "POST",
       headers: {
@@ -938,10 +948,7 @@ function App() {
       if (!res.ok) {
         console.error("Error al guardar en el servidor remoto");
       } else {
-        console.log("✅ Sincronizado con éxito en la base de datos de Supabase");
-        
-        // Una vez que el servidor confirma el éxito, limpiamos las fotos pesadas
-        // del almacenamiento local del cazador para mantener el teléfono optimizado y veloz
+        console.log("✅ Sincronizado con éxito en la base de datos");
         const dbOptimizada = { ...next };
         if (dbOptimizada.capturas && dbOptimizada.capturas.length > 0) {
           dbOptimizada.capturas = dbOptimizada.capturas.map(c => {
@@ -955,13 +962,31 @@ function App() {
       }
     })
     .catch(err => {
-      console.error("Fallo de red en el envío. Respaldando Base64 en el móvil para reintento automático:", err);
-      // En caso de microcortes imprevistos, nos aseguramos guardando el Base64 original de nuevo
+      console.error("Fallo de red en el envío. Respaldando en el móvil:", err);
       localStorage.setItem("precinto-db", JSON.stringify(next));
     });
   }
 
-  // 3. CONTROL DE ACCESO Y RENDERIZADO DE ÁREAS
+  // 5. INTERFAZ VISUAL DE LA PANTALLA DE CARGA (Aparece mientras loading sea true)
+  if (loading) {
+    return React.createElement("main", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-950 p-6 text-white text-center animate-fade-in" },
+      // Icono de un escudo/precinto grande
+      React.createElement("div", { className: "mb-6 grid h-20 w-20 place-items-center rounded-full bg-white/10 text-emerald-400" },
+        React.createElement(Icon, { name: "shield-check", className: "h-12 w-12" })
+      ),
+      // Título del software
+      React.createElement("h2", { className: "text-2xl font-black tracking-tight" }, "Sistema Precinto Digital"),
+      React.createElement("p", { className: "text-emerald-200/60 text-xs font-semibold uppercase tracking-wider mt-1" }, "Control Cinegético Profesional"),
+      
+      // Spinner (Rueda giratoria animada usando las clases nativas de Tailwind)
+      React.createElement("div", { className: "my-8 h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-white" }),
+      
+      // Mensaje dinámico explicativo
+      React.createElement("p", { className: "max-w-xs text-sm font-medium text-emerald-100/90" }, loadingMessage)
+    );
+  }
+
+  // 6. CONTROL DE ACCESO (Una vez que ha dejado de cargar)
   if (!user) return React.createElement(Login, { db: db, onLogin: setUser });
   
   return user.rol === "admin" 
@@ -969,5 +994,5 @@ function App() {
     : React.createElement(UserArea, { user: user, db: db, setDb: setDb });
 }
 
-// Inicialización de la aplicación en el DOM HTML
+// Inicialización en el DOM HTML
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
