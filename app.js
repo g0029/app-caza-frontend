@@ -875,7 +875,7 @@ function App() {
   const [loadingMessage, setLoadingMessage] = useState("Cargando la aplicación..."); // Mensaje dinámico
 
   // 2. NUEVO: useEffect asíncrono para inicializar la base de datos de forma limpia
-useEffect(() => {
+  useEffect(() => {
     async function inicializarApp() {
       // 1. PERSISTENCIA: Comprobamos antes de nada si ya había un usuario logueado en este móvil
       const usuarioGuardado = localStorage.getItem("usuario-sesion");
