@@ -28,7 +28,7 @@
             }
           }
         }
-};
+      };
     </script>
     <style>
       body {
@@ -52,13 +52,33 @@
   <body class="text-ink antialiased">
     <div id="root"></div>
 
-    <script src="./app.js"></script>
+    <script src="./app.js?v=1.0.1"></script>
 
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./service-worker.js')
-            .then(reg => console.log('¡Aplicación móvil lista para instalar!', reg))
+          // Registramos pasándole también la versión para obligar al navegador a ver los cambios de red
+          navigator.serviceWorker.register('./service-worker.js?v=1.0.1')
+            .then(reg => {
+              console.log('¡Aplicación móvil lista para instalar!', reg);
+              
+              // TRUCO MAESTRO ANTI-CACHÉ: Forzamos al service worker a buscar actualizaciones de inmediato
+              reg.update();
+
+              // Si el service worker encuentra cambios y hay uno nuevo esperando en segundo plano,
+              // le ordena tomar el control y limpia la caché vieja del tirón.
+              reg.onupdatefound = () => {
+                const installingWorker = reg.installing;
+                if (installingWorker) {
+                  installingWorker.onstatechange = () => {
+                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('✨ Nueva versión detectada. Limpiando caché interna...');
+                      window.location.reload();
+                    }
+                  };
+                }
+              };
+            })
             .catch(err => console.error('Error al activar modo App:', err));
         });
       }
