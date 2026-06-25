@@ -188,13 +188,25 @@ function Shell({ user, onLogout, children }) {
 function Login({ db, onLogin }) {
   const [form, setForm] = useState({ usuario: "", password: "" });
   const [error, setError] = useState("");
+
   function submit(event) {
     event.preventDefault();
+    
+    // Buscamos si el usuario y contraseña coinciden
     const found = db.usuarios.find(u => u.usuario === form.usuario && u.password === form.password);
+    
     if (!found) return setError("Credenciales incorrectas.");
     if (found.bloqueado) return setError("El acceso de este usuario está bloqueado.");
+    
+    // PERSISTENCIA: Guardamos el usuario con éxito en la memoria física del teléfono
+    localStorage.setItem("usuario-sesion", JSON.stringify(found));
+    
+    // Notificamos a la aplicación principal para cambiar de pantalla
     onLogin(found);
   }
+
+  // Recuerda que aquí continuaría tu return con el formulario de la interfaz visual...
+}
   return React.createElement("main", { className: "grid min-h-screen bg-field lg:grid-cols-[1fr_480px]" }, 
     React.createElement("section", { className: "relative flex min-h-[42vh] items-end overflow-hidden bg-forest-900 p-6 text-white lg:min-h-screen lg:p-12" }, 
       React.createElement("img", {
