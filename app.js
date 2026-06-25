@@ -872,8 +872,47 @@ function App() {
   const [db, setDbState] = useState(loadDb);
   const [user, setUser] = useState(null);
 
+  // 1. ESCUCHADOR INTELIGENTE DE COBERTURA: Detecta de forma automática cuándo vuelve internet
+  useEffect(() => {
+    function comprobarYSubir() {
+      console.log("🌐 ¡Conexión recuperada! Comprobando capturas pendientes...");
+      
+      // Leemos lo que se quedó congelado en la memoria del teléfono móvil
+      const localData = localStorage.getItem("precinto-db");
+      if (localData) {
+        const parsedData = JSON.parse(localData);
+        
+        // Buscamos si hay alguna captura que todavía conserve la foto Base64 real sin subir
+        const tieneFotosPendientes = parsedData.capturas?.some(c => c.imagen && c.imagen.includes('data:image'));
+        
+        if (tieneFotosPendientes) {
+          console.log("📤 Subiendo automáticamente las capturas acumuladas sin señal...");
+          // Forzamos el envío invocando a setDb (como ahora estamos online, hará el fetch)
+          setDb(parsedData);
+        }
+      }
+    }
+
+    // Vinculamos el evento nativo del teléfono
+    window.addEventListener('online', comprobarYSubir);
+    
+    // Limpieza al desmontar el componente
+    return () => window.removeEventListener('online', comprobarYSubir);
+  }, [db]);
+
+  // 2. FUNCIÓN SETDB MODIFICADA: Ahora gestiona el guardado adaptativo (online / offline)
   function setDb(next) {
-    // 1. Enviamos el objeto COMPLETO (con la foto comprimida ligera) al backend de Render
+    // Actualizamos el estado de la interfaz React para que el justificante se pinte al momento
+    setDbState(next);
+
+    // SI NO HAY INTERNET: Aseguramos los datos guardando el objeto con la FOTO REAL en el móvil
+    if (!navigator.onLine) {
+      console.warn("⚠️ Dispositivo offline. Conservando imagen en local hasta recuperar cobertura.");
+      localStorage.setItem("precinto-db", JSON.stringify(next));
+      return;
+    }
+
+    // SI HAY INTERNET: Lanzamos la petición hacia el servidor de Render normalmente
     fetch("https://sistema-caza-backend.onrender.com/api/db", {
       method: "POST",
       headers: {
@@ -885,26 +924,30 @@ function App() {
       if (!res.ok) {
         console.error("Error al guardar en el servidor remoto");
       } else {
-        console.log("Sincronizado con éxito en la base de datos");
+        console.log("✅ Sincronizado con éxito en la base de datos de Supabase");
+        
+        // Una vez que el servidor confirma el éxito, limpiamos las fotos pesadas
+        // del almacenamiento local del cazador para mantener el teléfono optimizado y veloz
+        const dbOptimizada = { ...next };
+        if (dbOptimizada.capturas && dbOptimizada.capturas.length > 0) {
+          dbOptimizada.capturas = dbOptimizada.capturas.map(c => {
+            if (c.imagen && c.imagen.includes('data:image')) {
+              return { ...c, imagen: 'Guardada en Base de Datos 💾' };
+            }
+            return c;
+          });
+        }
+        localStorage.setItem("precinto-db", JSON.stringify(dbOptimizada));
       }
     })
-    .catch(err => console.error("Error de red al conectar con el backend:", err));
-
-    // 2. Para el almacenamiento interno (localStorage), limpiamos la foto
-    // para optimizar el espacio físico del teléfono móvil del cazador
-    if (next.capturas && next.capturas.length > 0) {
-      next.capturas = next.capturas.map(c => {
-        if (c.imagen && c.imagen.includes('data:image')) {
-          return { ...c, imagen: 'Guardada en Base de Datos 💾' };
-        }
-        return c;
-      });
-    }
-
-    setDbState(next);
-    localStorage.setItem("precinto-db", JSON.stringify(next));
+    .catch(err => {
+      console.error("Fallo de red en el envío. Respaldando Base64 en el móvil para reintento automático:", err);
+      // En caso de microcortes imprevistos, nos aseguramos guardando el Base64 original de nuevo
+      localStorage.setItem("precinto-db", JSON.stringify(next));
+    });
   }
 
+  // 3. CONTROL DE ACCESO Y RENDERIZADO DE ÁREAS
   if (!user) return React.createElement(Login, { db: db, onLogin: setUser });
   
   return user.rol === "admin" 
@@ -912,4 +955,5 @@ function App() {
     : React.createElement(UserArea, { user: user, db: db, setDb: setDb });
 }
 
+// Inicialización de la aplicación en el DOM HTML
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
