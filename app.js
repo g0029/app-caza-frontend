@@ -350,6 +350,14 @@ function UserArea({ user, db, setDb }) {
     precintoNumero: db.precintos.find(p => p.id === a.precinto)?.numero_precinto || ""
   }));
 
+  // NUEVO: Función para cerrar sesión de forma limpia borrando la persistencia
+  function salir() {
+    localStorage.removeItem("usuario-sesion");
+    window.location.reload();
+  }
+
+  // Aquí ya continúa el resto de tu lógica (funciones de recoger, devolver, etc.) y tu return...
+
   function log(nextDb, accion) {
     return {
       ...nextDb,
