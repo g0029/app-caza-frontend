@@ -584,13 +584,21 @@ function AdminArea({ user, db, setDb }) {
     setDb(addLog(next, `${target.bloqueado ? "Desbloqueado" : "Bloqueado"} ${target.usuario}`));
   }
 
-  function createSeal(event) {
+ function createSeal(event) {
     event.preventDefault();
     if (!newSeal.trim()) return;
+    
+    // Validar si el número de precinto ya existe para evitar duplicados
+    const existe = db.precintos.some(p => p.numero_precinto.toUpperCase() === newSeal.trim().toUpperCase());
+    if (existe) {
+      alert("Este número de precinto ya está registrado.");
+      return;
+    }
+
     const item = {
       id: Date.now(),
       numero_precinto: newSeal.trim().toUpperCase(),
-      estado: "DISPONIBLE",
+      estado: "DISPONIBLE", // Corregido sin letras intrusas
       coto: newSealCoto
     };
     const next = { ...db, precintos: [item, ...db.precintos] };
@@ -600,13 +608,26 @@ function AdminArea({ user, db, setDb }) {
 
   function removeSeal(id) {
     const seal = db.precintos.find(p => p.id === id);
+    if (!seal) return;
+
+    // CONTROL DE SEGURIDAD: No permitir borrar precintos que ya se han usado o están asignados
+    if (seal.estado !== "DISPONIBLE") {
+      alert(`No se puede eliminar el precinto ${seal.numero_precinto} porque su estado es ${seal.estado}.`);
+      return;
+    }
+
     const next = { ...db, precintos: db.precintos.filter(p => p.id !== id) };
     setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado`));
   }
 
+  // FILTRADO SEGURO: Evita que la app se rompa si un precinto o usuario ha sido eliminado
   const filteredCaptures = db.capturas.filter(c => {
-    const seal = db.precintos.find(p => p.id === c.precinto)?.numero_precinto || "";
-    const owner = db.usuarios.find(u => u.id === c.usuario)?.nombre || "";
+    const sealObj = db.precintos.find(p => p.id === c.precinto);
+    const seal = sealObj ? sealObj.numero_precinto : "Precinto Eliminado";
+    
+    const ownerObj = db.usuarios.find(u => u.id === c.usuario);
+    const owner = ownerObj ? ownerObj.nombre : "Usuario Eliminado";
+    
     return `${seal} ${owner} ${c.coto} ${c.estado}`.toLowerCase().includes(search.toLowerCase());
   });
 
