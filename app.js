@@ -618,6 +618,14 @@ function AdminArea({ user, db, setDb }) {
     conectados: 4
   }), [db]);
 
+  // NUEVO: Función para cerrar sesión de forma limpia borrando la persistencia
+  function salir() {
+    localStorage.removeItem("usuario-sesion");
+    window.location.reload();
+  }
+
+  // Aquí continúa el resto de tus funciones de administrador (crearUsuario, conmutarBloqueo, etc.) y tu return...
+
   function addLog(nextDb, accion) {
     return {
       ...nextDb,
