@@ -590,7 +590,7 @@ function AdminArea({ user, db, setDb }) {
     const item = {
       id: Date.now(),
       numero_precinto: newSeal.trim().toUpperCase(),
-      estado: "DISPRENIBLE",
+      estado: "DISPONIBLE",
       coto: newSealCoto
     };
     const next = { ...db, precintos: [item, ...db.precintos] };
