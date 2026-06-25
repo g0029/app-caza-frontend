@@ -110,17 +110,31 @@ const initialDb = {
   }]
 };
 
+// MODIFICADO: loadDb adaptativo e inteligente para situaciones sin cobertura
 function loadDb() {
+  // 1. Si el cazador no tiene cobertura en este instante, evitamos bloquear el navegador.
+  // Cargamos inmediatamente la copia de seguridad guardada en el almacenamiento del teléfono.
+  if (!navigator.onLine) {
+    console.warn("📱 Iniciando en modo offline. Cargando datos del almacenamiento local.");
+    const local = localStorage.getItem("precinto-db");
+    return local ? JSON.parse(local) : initialDb;
+  }
+
+  // 2. Si el dispositivo está online, intentamos traer la última versión desde el servidor de Render
   try {
     const xhr = new XMLHttpRequest();
-    xhr.open("GET", "https://sistema-caza-backend.onrender.com/api/db", false);
+    xhr.open("GET", "https://sistema-caza-backend.onrender.com/api/db", false); 
     xhr.send();
     if (xhr.status === 200) {
       const data = JSON.parse(xhr.responseText);
       return data && data.usuarios ? data : initialDb;
     }
   } catch (e) {
-    console.error("No se pudo conectar al servidor backend, usando datos locales por defecto", e);
+    // 3. Si ocurre un microcorte justo durante la petición o el backend no responde, 
+    // activamos el plan de contingencia usando el localStorage para que el cazador no se quede tirado.
+    console.error("No se pudo conectar al servidor backend, usando respaldo local", e);
+    const local = localStorage.getItem("precinto-db");
+    return local ? JSON.parse(local) : initialDb;
   }
   return initialDb;
 }
