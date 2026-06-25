@@ -110,8 +110,6 @@ const initialDb = {
   }]
 };
 
-
-
 const ICON_PATHS = {
   "shield-check": ["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z", "m9 12 2 2 4-5"],
   "log-out": ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"],
@@ -192,75 +190,15 @@ function Login({ db, onLogin }) {
   function submit(event) {
     event.preventDefault();
     
-    // 1. Buscamos si el usuario y contraseña coinciden
     const found = db.usuarios.find(u => u.usuario === form.usuario && u.password === form.password);
     
     if (!found) return setError("Credenciales incorrectas.");
     if (found.bloqueado) return setError("El acceso de este usuario está bloqueado.");
     
-    // 2. PERSISTENCIA: Guardamos el usuario con éxito en la memoria del teléfono
     localStorage.setItem("usuario-sesion", JSON.stringify(found));
-    
-    // 3. Notificamos a la aplicación principal para cambiar de pantalla
     onLogin(found);
   }
 
-  return React.createElement("main", { className: "grid min-h-screen bg-field lg:grid-cols-[1fr_480px]" }, 
-    React.createElement("section", { className: "relative flex min-h-[42vh] items-end overflow-hidden bg-forest-900 p-6 text-white lg:min-h-screen lg:p-12" }, 
-      React.createElement("img", {
-        src: "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1600&q=80",
-        alt: "Bosque",
-        className: "absolute inset-0 h-full w-full object-cover opacity-38"
-      }), 
-      React.createElement("div", { className: "absolute inset-0 bg-gradient-to-t from-forest-900 via-forest-900/68 to-forest-900/20" }), 
-      React.createElement("div", { className: "relative max-w-2xl pb-3" }, 
-        React.createElement("p", { className: "mb-3 inline-flex items-center gap-2 rounded bg-white/12 px-3 py-1 text-sm font-semibold ring-1 ring-white/20" }, 
-          React.createElement(Icon, { name: "map-pin", className: "h-4 w-4" }), "Uso en campo y administración"
-        ), 
-        React.createElement("h2", { className: "max-w-2xl text-4xl font-black leading-tight sm:text-5xl lg:text-6xl" }, "Precinto Digital de Caza"), 
-        React.createElement("p", { className: "mt-4 max-w-xl text-base text-white/82 sm:text-lg" }, "Asignación, devolución, captura y auditoría desde una interfaz rápida, trazable y preparada para móvil.")
-      )
-    ), 
-    React.createElement("section", { className: "flex items-center justify-center px-4 py-8 sm:px-8" }, 
-      React.createElement("form", { onSubmit: submit, className: "w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-soft" }, 
-        React.createElement("div", { className: "mb-7" }, 
-          React.createElement("div", { className: "mb-4 grid h-12 w-12 place-items-center rounded bg-forest-100 text-forest-700" }, 
-            React.createElement(Icon, { name: "fingerprint", className: "h-7 w-7" })
-          ), 
-          React.createElement("h1", { className: "text-2xl font-bold" }, "Acceso seguro"), 
-          React.createElement("p", { className: "mt-2 text-sm text-slate-600" }, "El rol se detecta automáticamente al iniciar sesión.")
-        ), 
-        React.createElement("label", { className: "mb-4 block" }, 
-          React.createElement("span", { className: "text-sm font-semibold" }, "Usuario"), 
-          React.createElement("input", {
-            value: form.usuario,
-            onChange: e => setForm({ ...form, usuario: e.target.value }),
-            className: "mt-2 h-12 w-full rounded border border-slate-300 px-3 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100",
-            autoComplete: "username"
-          })
-        ), 
-        React.createElement("label", { className: "mb-3 block" }, 
-          React.createElement("span", { className: "text-sm font-semibold" }, "Contraseña"), 
-          React.createElement("input", {
-            type: "password",
-            value: form.password,
-            onChange: e => setForm({ ...form, password: e.target.value }),
-            className: "mt-2 h-12 w-full rounded border border-slate-300 px-3 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100",
-            autoComplete: "current-password"
-          })
-        ), 
-        error && React.createElement("p", { className: "mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" }, error), 
-        React.createElement("div", { className: "mb-5 flex items-center justify-between text-sm" }, 
-          React.createElement("button", { type: "button", className: "font-semibold text-forest-700 hover:underline" }, "Recuperar contraseña"), 
-          React.createElement("span", { className: "text-slate-500" }, "ana/123 · admin/admin")
-        ), 
-        React.createElement("button", { className: "inline-flex h-12 w-full items-center justify-center gap-2 rounded bg-forest-700 px-4 font-bold text-white hover:bg-forest-900" }, 
-          React.createElement(Icon, { name: "log-in" }), "Entrar"
-        )
-      )
-    )
-  );
-}
   return React.createElement("main", { className: "grid min-h-screen bg-field lg:grid-cols-[1fr_480px]" }, 
     React.createElement("section", { className: "relative flex min-h-[42vh] items-end overflow-hidden bg-forest-900 p-6 text-white lg:min-h-screen lg:p-12" }, 
       React.createElement("img", {
@@ -350,13 +288,10 @@ function UserArea({ user, db, setDb }) {
     precintoNumero: db.precintos.find(p => p.id === a.precinto)?.numero_precinto || ""
   }));
 
-  // NUEVO: Función para cerrar sesión de forma limpia borrando la persistencia
   function salir() {
     localStorage.removeItem("usuario-sesion");
     window.location.reload();
   }
-
-  // Aquí ya continúa el resto de tu lógica (funciones de recoger, devolver, etc.) y tu return...
 
   function log(nextDb, accion) {
     return {
@@ -417,18 +352,12 @@ function UserArea({ user, db, setDb }) {
     setMessage({ type: "success", text: `Precinto ${seal.numero_precinto} disponible de nuevo.` });
   }
 
-  // MODIFICADO: Ahora maneja la compresión de forma asíncrona antes de guardar la foto en el formulario
   async function handleImage(file) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
       const originalBase64 = reader.result;
-      console.log("Tamaño original:", originalBase64.length);
-      
-      // Comprimimos la imagen a un tamaño máximo de 1024px de ancho y al 70% de calidad JPEG
       const base64Comprimida = await comprimirImagen(originalBase64, 1024, 0.7);
-      console.log("Tamaño comprimido:", base64Comprimida.length);
-      
       setCapture(current => ({ ...current, imagen: base64Comprimida }));
     };
     reader.readAsDataURL(file);
@@ -444,7 +373,7 @@ function UserArea({ user, db, setDb }) {
       id: Date.now(),
       precinto: seal.id,
       usuario: user.id,
-      imagen: capture.imagen, // Aquí ya viaja la versión comprimida ligera
+      imagen: capture.imagen,
       observaciones: capture.observaciones,
       fecha: new Date().toISOString(),
       coto: assignment.coto,
@@ -457,7 +386,7 @@ function UserArea({ user, db, setDb }) {
       asignaciones: db.asignaciones.map(a => a.id === assignment.id ? { ...a, estado: "USADO" } : a),
       capturas: [item, ...db.capturas]
     };
-    setDb(log(next, `Captura registrada con ${seal.numero_precinto}`));
+    setDb(log(next, `Capture registrada con ${seal.numero_precinto}`));
     setCapture({ numero: "", observaciones: "", imagen: "" });
     setMessage({
       type: "success",
@@ -466,7 +395,7 @@ function UserArea({ user, db, setDb }) {
     });
   }
 
-  return React.createElement(Shell, { user: user, onLogout: () => location.reload() }, 
+  return React.createElement(Shell, { user: user, onLogout: salir }, 
     React.createElement("section", { className: "mb-6 flex flex-col justify-between gap-4 rounded-lg bg-forest-900 p-5 text-white sm:flex-row sm:items-center" }, 
       React.createElement("div", null, 
         React.createElement("p", { className: "text-sm font-semibold text-forest-100" }, "Área de Usuario"), 
@@ -556,7 +485,7 @@ function UserArea({ user, db, setDb }) {
           React.createElement("label", null, 
             React.createElement("span", { className: "text-sm font-semibold" }, "Observaciones"), 
             React.createElement("textarea", {
-              value: capture.observations,
+              value: capture.observaciones,
               onChange: e => setCapture({ ...capture, observaciones: e.target.value }),
               rows: "3",
               className: "mt-2 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100"
@@ -618,13 +547,10 @@ function AdminArea({ user, db, setDb }) {
     conectados: 4
   }), [db]);
 
-  // NUEVO: Función para cerrar sesión de forma limpia borrando la persistencia
   function salir() {
     localStorage.removeItem("usuario-sesion");
     window.location.reload();
   }
-
-  // Aquí continúa el resto de tus funciones de administrador (crearUsuario, conmutarBloqueo, etc.) y tu return...
 
   function addLog(nextDb, accion) {
     return {
@@ -664,7 +590,7 @@ function AdminArea({ user, db, setDb }) {
     const item = {
       id: Date.now(),
       numero_precinto: newSeal.trim().toUpperCase(),
-      estado: "DISPONIBLE",
+      estado: "DISPRENIBLE",
       coto: newSealCoto
     };
     const next = { ...db, precintos: [item, ...db.precintos] };
@@ -684,7 +610,7 @@ function AdminArea({ user, db, setDb }) {
     return `${seal} ${owner} ${c.coto} ${c.estado}`.toLowerCase().includes(search.toLowerCase());
   });
 
-  return React.createElement(Shell, { user: user, onLogout: () => location.reload() }, 
+  return React.createElement(Shell, { user: user, onLogout: salir }, 
     React.createElement("section", { className: "mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" }, 
       React.createElement(Metric, { label: "Disponibles", value: stats.disponibles }), 
       React.createElement(Metric, { label: "Asignados", value: stats.asignados }), 
@@ -939,21 +865,20 @@ function formatDate(value) {
 
 function App() {
   // 1. Estados de la aplicación
-  const [db, setDbState] = useState(initialDb); // Empezamos con la base local por defecto
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // NUEVO: Estado de carga activado al arrancar
-  const [loadingMessage, setLoadingMessage] = useState("Cargando la aplicación..."); // Mensaje dinámico
+  const [db, setDbState] = useState(initialDb);
+  
+  // SOLUCIÓN PERSISTENCIA CRITICAL: Carga inmediata síncrona al arrancar
+  const [user, setUser] = useState(() => {
+    const usuarioGuardado = localStorage.getItem("usuario-sesion");
+    return usuarioGuardado ? JSON.parse(usuarioGuardado) : null;
+  });
 
-  // 2. NUEVO: useEffect asíncrono para inicializar la base de datos de forma limpia
+  const [loading, setLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState("Cargando la aplicación...");
+
+  // 2. useEffect asíncrono REPARADO Y COMPACTADO (Sin duplicar código)
   useEffect(() => {
     async function inicializarApp() {
-      // 1. PERSISTENCIA: Comprobamos antes de nada si ya había un usuario logueado en este móvil
-      const usuarioGuardado = localStorage.getItem("usuario-sesion");
-      if (usuarioGuardado) {
-        setUser(JSON.parse(usuarioGuardado));
-      }
-
-      // Caso A: Si el cazador está offline (sin cobertura), cargamos local al instante y quitamos la carga
       if (!navigator.onLine) {
         console.warn("📱 Iniciando en modo offline. Cargando copia local.");
         const local = localStorage.getItem("precinto-db");
@@ -962,17 +887,15 @@ function App() {
         return;
       }
 
-      // Caso B: Si está online, intentamos conectar de forma asíncrona con el backend de Render
       try {
         setLoadingMessage("Conectando con el servidor seguro de Render... 📡");
         
-        // Ponemos un temporizador para avisar si el servidor tarda en "despertar"
         const timerAviso = setTimeout(() => {
           setLoadingMessage("Despertando el servidor remoto... Esto puede tardar unos 40 segundos la primera vez ⏳");
         }, 3500);
 
         const respuesta = await fetch("https://sistema-caza-backend.onrender.com/api/db");
-        clearTimeout(timerAviso); // Si ya ha respondido, quitamos el aviso largo
+        clearTimeout(timerAviso);
 
         if (respuesta.ok) {
           const data = await respuesta.json();
@@ -984,24 +907,10 @@ function App() {
           throw new Error("Respuesta incorrecta del servidor");
         }
       } catch (error) {
-        // Caso C: Plan de contingencia si el servidor falla, está caído o hay microcortes de red
         console.error("No se pudo conectar al servidor, usando respaldo local:", error);
         const local = localStorage.getItem("precinto-db");
         if (local) setDbState(JSON.parse(local));
       } finally {
-        // Pase lo que pase (éxito o fallo), quitamos la pantalla de carga para que la app sea utilizable
-        setLoading(false);
-      }
-    }
-
-    inicializarApp();
-  }, []);
-        // Caso C: Plan de contingencia si el servidor falla o hay microcortes
-        console.error("No se pudo conectar al servidor, usando respaldo local:", error);
-        const local = localStorage.getItem("precinto-db");
-        if (local) setDbState(JSON.parse(local));
-      } finally {
-        // En cualquier caso, una vez terminado el proceso, quitamos la pantalla de carga
         setLoading(false);
       }
     }
@@ -1009,7 +918,7 @@ function App() {
     inicializarApp();
   }, []);
 
-  // 3. ESCUCHADOR INTELIGENTE DE COBERTURA: Sigue funcionando igual que antes
+  // 3. ESCUCHADOR DE COBERTURA
   useEffect(() => {
     function comprobarYSubir() {
       console.log("🌐 ¡Conexión recuperada! Comprobando capturas pendientes...");
@@ -1027,7 +936,7 @@ function App() {
     return () => window.removeEventListener('online', comprobarYSubir);
   }, [db]);
 
-  // 4. FUNCIÓN SETDB: Sigue gestionando la sincronización perfectamente
+  // 4. FUNCIÓN SETDB
   function setDb(next) {
     setDbState(next);
 
@@ -1067,26 +976,20 @@ function App() {
     });
   }
 
-  // 5. INTERFAZ VISUAL DE LA PANTALLA DE CARGA (Aparece mientras loading sea true)
+  // 5. INTERFAZ VISUAL DE LA PANTALLA DE CARGA
   if (loading) {
     return React.createElement("main", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-950 p-6 text-white text-center animate-fade-in" },
-      // Icono de un escudo/precinto grande
       React.createElement("div", { className: "mb-6 grid h-20 w-20 place-items-center rounded-full bg-white/10 text-emerald-400" },
         React.createElement(Icon, { name: "shield-check", className: "h-12 w-12" })
       ),
-      // Título del software
       React.createElement("h2", { className: "text-2xl font-black tracking-tight" }, "Sistema Precinto Digital"),
       React.createElement("p", { className: "text-emerald-200/60 text-xs font-semibold uppercase tracking-wider mt-1" }, "Control Cinegético Profesional"),
-      
-      // Spinner (Rueda giratoria animada usando las clases nativas de Tailwind)
       React.createElement("div", { className: "my-8 h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-white" }),
-      
-      // Mensaje dinámico explicativo
       React.createElement("p", { className: "max-w-xs text-sm font-medium text-emerald-100/90" }, loadingMessage)
     );
   }
 
-  // 6. CONTROL DE ACCESO (Una vez que ha dejado de cargar)
+  // 6. CONTROL DE ACCESO
   if (!user) return React.createElement(Login, { db: db, onLogin: setUser });
   
   return user.rol === "admin" 
