@@ -863,8 +863,14 @@ function App() {
   const [loadingMessage, setLoadingMessage] = useState("Cargando la aplicación..."); // Mensaje dinámico
 
   // 2. NUEVO: useEffect asíncrono para inicializar la base de datos de forma limpia
-  useEffect(() => {
+useEffect(() => {
     async function inicializarApp() {
+      // 1. PERSISTENCIA: Comprobamos antes de nada si ya había un usuario logueado en este móvil
+      const usuarioGuardado = localStorage.getItem("usuario-sesion");
+      if (usuarioGuardado) {
+        setUser(JSON.parse(usuarioGuardado));
+      }
+
       // Caso A: Si el cazador está offline (sin cobertura), cargamos local al instante y quitamos la carga
       if (!navigator.onLine) {
         console.warn("📱 Iniciando en modo offline. Cargando copia local.");
@@ -896,6 +902,18 @@ function App() {
           throw new Error("Respuesta incorrecta del servidor");
         }
       } catch (error) {
+        // Caso C: Plan de contingencia si el servidor falla, está caído o hay microcortes de red
+        console.error("No se pudo conectar al servidor, usando respaldo local:", error);
+        const local = localStorage.getItem("precinto-db");
+        if (local) setDbState(JSON.parse(local));
+      } finally {
+        // Pase lo que pase (éxito o fallo), quitamos la pantalla de carga para que la app sea utilizable
+        setLoading(false);
+      }
+    }
+
+    inicializarApp();
+  }, []);
         // Caso C: Plan de contingencia si el servidor falla o hay microcortes
         console.error("No se pudo conectar al servidor, usando respaldo local:", error);
         const local = localStorage.getItem("precinto-db");
