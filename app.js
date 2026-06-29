@@ -4,7 +4,7 @@ const {
   useState
 } = React;
 
-// Función nativa para comprimir imágenes antes de enviarlas al servidor
+// NUEVO: Función nativa para comprimir imágenes antes de enviarlas al servidor
 function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -14,6 +14,7 @@ function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
       let width = img.width;
       let height = img.height;
 
+      // Calculamos las nuevas dimensiones manteniendo la proporción original
       if (width > maxWidth) {
         height = Math.round((height * maxWidth) / width);
         width = maxWidth;
@@ -25,12 +26,14 @@ function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
+      // Exportamos de nuevo a Base64 pero comprimido en formato JPEG (mucho más ligero que PNG)
       const resultadoBase64 = canvas.toDataURL('image/jpeg', quality);
       resolve(resultadoBase64);
     };
   });
 }
 
+// 1. CAMBIADO: Nuevos nombres de cotos
 const COTOS = ["Coto Nuevo", "Coto Viejo"];
 
 const STATUS_STYLE = {
@@ -40,12 +43,7 @@ const STATUS_STYLE = {
   BLOQUEADO: "bg-red-50 text-red-700 ring-red-200"
 };
 
-// MEJORA: Se añade el objeto 'configuracion' en la base de datos inicial para guardar los parámetros globales
 const initialDb = {
-  configuracion: {
-    precintosDesactivados: false,
-    maximoDias: 15 // Valor por defecto del cupo mensual de días de caza
-  },
   usuarios: [{
     id: 1,
     nombre: "Ana Martín",
@@ -109,7 +107,11 @@ const initialDb = {
     accion: "Sistema inicializado",
     usuario: "admin",
     fecha: new Date(Date.now() - 172800000).toISOString()
-  }]
+  }],
+  // MEJORA: Objeto global de configuración persistente para Supabase
+  configuracion: {
+    maximo_dias_mes: 10
+  }
 };
 
 const ICON_PATHS = {
@@ -133,8 +135,7 @@ const ICON_PATHS = {
   database: ["M3 6c0-2 4-4 9-4s9 2 9 4-4 4-9 4-9-2-9-4Z", "M3 6v6c0 2 4 4 9 4s9-2 9-4V6", "M3 12v6c0 2 4 4 9 4s9-2 9-4v-6"],
   "bar-chart-3": ["M3 3v18h18", "M7 16v-5", "M12 16V7", "M17 16v-8"],
   download: ["M12 3v12", "m7 10 5 5 5-5", "M5 21h14"],
-  archive: ["M21 8v13H3V8", "M1 3h22v5H1Z", "M10 12h4"],
-  "settings": ["M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"]
+  archive: ["M21 8v13H3V8", "M1 3h22v5H1Z", "M10 12h4"]
 };
 
 function Icon({ name, className = "h-5 w-5" }) {
@@ -192,9 +193,12 @@ function Login({ db, onLogin }) {
 
   function submit(event) {
     event.preventDefault();
+    
     const found = db.usuarios.find(u => u.usuario === form.usuario && u.password === form.password);
+    
     if (!found) return setError("Credenciales incorrectas.");
     if (found.bloqueado) return setError("El acceso de este usuario está bloqueado.");
+    
     localStorage.setItem("usuario-sesion", JSON.stringify(found));
     onLogin(found);
   }
@@ -282,12 +286,26 @@ function UserArea({ user, db, setDb }) {
   const myAssignments = db.asignaciones.filter(a => a.usuario === user.id && a.estado === "ASIGNADO");
   const latestAssignment = [...myAssignments].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
   const latestSeal = latestAssignment && db.precintos.find(p => p.id === latestAssignment.precinto);
-  
   const occupiedParajes = db.asignaciones.filter(a => a.estado === "ASIGNADO" && a.usuario !== user.id && a.coto === pickup.coto).map(a => ({
     ...a,
     usuarioNombre: db.usuarios.find(u => u.id === a.usuario)?.nombre || "Otro cazador",
     precintoNumero: db.precintos.find(p => p.id === a.precinto)?.numero_precinto || ""
   }));
+
+  // MEJORA: Calcular dinámicamente las salidas del cazador en el mes calendario actual
+  const salidasEsteMes = useMemo(() => {
+    const ahora = new Date();
+    const mesActual = ahora.getMonth(); // 0 = Enero, 1 = Febrero...
+    const anioActual = ahora.getFullYear();
+    
+    return db.asignaciones.filter(a => {
+      if (a.usuario !== user.id) return false;
+      const fechaAsignacion = new Date(a.fecha);
+      return fechaAsignacion.getMonth() === mesActual && fechaAsignacion.getFullYear() === anioActual;
+    }).length;
+  }, [db.asignaciones, user.id]);
+
+  const limiteMensual = db.configuracion?.maximo_dias_mes || 10;
 
   function salir() {
     localStorage.removeItem("usuario-sesion");
@@ -310,30 +328,11 @@ function UserArea({ user, db, setDb }) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
     
-    // REGLA: No permitir solicitar si ya tiene UN precinto asignado activo
-    const yaTieneAsignado = db.asignaciones.some(a => a.usuario === user.id && a.estado === "ASIGNADO");
-    if (yaTieneAsignado) {
+    // CAMBIADO: Reemplazado el bloqueo de "1 activo" por la validación del cupo mensual dinámico de Supabase
+    if (salidasEsteMes >= limiteMensual) {
       return setMessage({ 
         type: "error", 
-        text: "No puedes solicitar un nuevo precinto. Ya tienes uno activo en tu panel. Debes registrar su captura o devolverlo primero." 
-      });
-    }
-
-    // CORREGIDO: Ahora evalúa correctamente la configuración si el administrador bloqueó la recogida general
-    if (db.configuracion?.precintosDesactivados) {
-      return setMessage({
-        type: "error",
-        text: "El administrador ha desactivado temporalmente la recogida de precintos para toda la temporada."
-      });
-    }
-
-    // MEJORA: Validación dinámica del cupo máximo de días (cupo mensual de caza)
-    const totalDiasUsados = db.capturas.filter(c => c.usuario === user.id).length; // Equivalente a capturas/días consumidos
-    const maximoDiasPermitidos = db.configuracion?.maximoDias || 15;
-    if (totalDiasUsados >= maximoDiasPermitidos) {
-      return setMessage({
-        type: "error",
-        text: `Has alcanzado el límite máximo permitido de la temporada (${maximoDiasPermitidos} días/piezas). No puedes solicitar más precintos.`
+        text: `No puedes solicitar más precintos. Has agotado tus ${limiteMensual} días/salidas de caza autorizadas para este mes calendario.` 
       });
     }
     
@@ -350,13 +349,11 @@ function UserArea({ user, db, setDb }) {
       fecha,
       estado: "ASIGNADO"
     };
-    
     const next = {
       ...db,
       precintos: db.precintos.map(p => p.id === free.id ? { ...p, estado: "ASIGNADO" } : p),
       asignaciones: [assignment, ...db.asignaciones]
     };
-    
     setDb(log(next, `Precinto ${free.numero_precinto} asignado a ${pickup.coto}`));
     setPickup({ coto: COTOS[0], paraje: "" });
     setReturnNumber(free.numero_precinto);
@@ -429,12 +426,16 @@ function UserArea({ user, db, setDb }) {
     React.createElement("section", { className: "mb-6 flex flex-col justify-between gap-4 rounded-lg bg-forest-900 p-5 text-white sm:flex-row sm:items-center" }, 
       React.createElement("div", null, 
         React.createElement("p", { className: "text-sm font-semibold text-forest-100" }, "Área de Usuario"), 
-        React.createElement("h2", { className: "text-2xl font-black" }, "Operativa en campo")
+        React.createElement("h2", { className: "text-2xl font-black" }, "Operativa en campo"),
+        // MEJORA VISUAL: Texto informativo del estado del cupo mensual para el cazador
+        React.createElement("p", { className: "text-xs font-semibold text-emerald-300 mt-1" }, 
+          `Consumo de cupo: ${salidasEsteMes} de ${limiteMensual} días de caza utilizados este mes.`
+        )
       ), 
       React.createElement("div", { className: "grid grid-cols-3 gap-2 text-center" }, 
         React.createElement(Metric, { label: "Disponibles", value: db.precintos.filter(p => p.estado === "DISPONIBLE").length, dark: true }), 
         React.createElement(Metric, { label: "Asignados", value: myAssignments.length, dark: true }), 
-        React.createElement(Metric, { label: "Usados (Cupo)", value: `${db.capturas.filter(c => c.usuario === user.id).length}/${db.configuracion?.maximoDias || 15}`, dark: true })
+        React.createElement(Metric, { label: "Usados", value: db.capturas.filter(c => c.usuario === user.id).length, dark: true })
       )
     ), 
     React.createElement("div", { className: "grid gap-4 lg:grid-cols-3" }, 
@@ -482,7 +483,7 @@ function UserArea({ user, db, setDb }) {
               className: "mt-2 flex w-full items-center justify-between rounded border border-forest-200 bg-forest-50 px-3 py-3 text-left text-sm hover:bg-forest-100"
             }, 
               React.createElement("span", null, React.createElement("strong", null, latestSeal.numero_precinto), React.createElement("span", { className: "mt-1 block text-slate-600" }, latestAssignment.coto, " · ", latestAssignment.paraje)), 
-              React.createElement(Badge, { tone: latestSeal.estado }, seal.estado)
+              React.createElement(Badge, { tone: latestSeal.estado }, latestSeal.estado)
             ), 
             React.createElement("input", {
               value: returnNumber,
@@ -570,27 +571,11 @@ function AdminArea({ user, db, setDb }) {
   const [newSealCoto, setNewSealCoto] = useState(COTOS[0]);
   const [newUser, setNewUser] = useState({ nombre: "", usuario: "", password: "", rol: "cazador" });
   
-  // MEJORA: Estado local para manejar los inputs de configuración en el Panel de Control
-  const [cfgInput, setCfgInput] = useState({
-    precintosDesactivados: db.configuracion?.precintosDesactivados || false,
-    maximoDias: db.configuracion?.maximoDias || 15
-  });
-
-  // Efecto para sincronizar los controles del admin si la DB remota cambia
-  useEffect(() => {
-    if (db.configuracion) {
-      setCfgInput({
-        precintosDesactivados: db.configuracion.precintosDesactivados,
-        maximoDias: db.configuracion.maximoDias
-      });
-    }
-  }, [db.configuracion]);
-
   const stats = useMemo(() => ({
     disponibles: db.precintos.filter(p => p.estado === "DISPONIBLE").length,
     asignados: db.precintos.filter(p => p.estado === "ASIGNADO").length,
     usados: db.precintos.filter(p => p.estado === "USADO").length,
-    conectados: db.usuarios.length
+    conectados: 4
   }), [db]);
 
   function salir() {
@@ -610,18 +595,17 @@ function AdminArea({ user, db, setDb }) {
     };
   }
 
-  // MEJORA: Nueva función administradora que guarda y sincroniza la configuración (Días y Bloqueo)
-  function actualizarConfiguracion(event) {
-    event.preventDefault();
+  // MEJORA: Modificar el valor del cupo mensual en la BD estructurada y empujarlo a Supabase mediante setDb
+  function cambiarMaximoDiasMes(nuevoLimite) {
+    const valorNumero = parseInt(nuevoLimite) || 1;
     const next = {
       ...db,
       configuracion: {
-        precintosDesactivados: cfgInput.precintosDesactivados,
-        maximoDias: parseInt(cfgInput.maximoDias, 10) || 15
+        ...db.configuracion,
+        maximo_dias_mes: valorNumero
       }
     };
-    setDb(addLog(next, `Configuración actualizada: Máx ${cfgInput.maximoDias} días, Bloqueo general: ${cfgInput.precintosDesactivados}`));
-    alert("¡Configuración guardada y sincronizada correctamente!");
+    setDb(addLog(next, `Límite de salidas/días mensuales actualizado a: ${valorNumero}`));
   }
 
   function createUser(event) {
@@ -648,6 +632,7 @@ function AdminArea({ user, db, setDb }) {
     event.preventDefault();
     if (!newSeal.trim()) return;
     
+    // Validar si el número de precinto ya existe para evitar duplicados
     const existe = db.precintos.some(p => p.numero_precinto.toUpperCase() === newSeal.trim().toUpperCase());
     if (existe) {
       alert("Este número de precinto ya está registrado.");
@@ -657,7 +642,7 @@ function AdminArea({ user, db, setDb }) {
     const item = {
       id: Date.now(),
       numero_precinto: newSeal.trim().toUpperCase(),
-      estado: "DISPONIBLE",
+      estado: "DISPONIBLE", 
       coto: newSealCoto
     };
     const next = { ...db, precintos: [item, ...db.precintos] };
@@ -669,6 +654,7 @@ function AdminArea({ user, db, setDb }) {
     const seal = db.precintos.find(p => p.id === id);
     if (!seal) return;
 
+    // CONTROL DE SEGURIDAD: No permitir borrar precintos que ya se han usado o están asignados
     if (seal.estado !== "DISPONIBLE") {
       alert(`No se puede eliminar el precinto ${seal.numero_precinto} because su estado es ${seal.estado}.`);
       return;
@@ -678,6 +664,7 @@ function AdminArea({ user, db, setDb }) {
     setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado`));
   }
 
+  // FILTRADO SEGURO: Evita que la app se rompa si un precinto o usuario ha sido eliminado
   const filteredCaptures = db.capturas.filter(c => {
     const sealObj = db.precintos.find(p => p.id === c.precinto);
     const seal = sealObj ? sealObj.numero_precinto : "Precinto Eliminado";
@@ -693,17 +680,28 @@ function AdminArea({ user, db, setDb }) {
       React.createElement(Metric, { label: "Disponibles", value: stats.disponibles }), 
       React.createElement(Metric, { label: "Asignados", value: stats.asignados }), 
       React.createElement(Metric, { label: "Usados", value: stats.usados }), 
-      React.createElement(Metric, { label: "Total Usuarios", value: stats.conectados })
+      React.createElement(Metric, { label: "Usuarios conectados", value: stats.conectados })
     ), 
+
+    // MEJORA: Tarjeta/Panel de control global permanente para el Administrador para setear el cupo mensual
+    React.createElement("div", { className: "mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-soft" },
+      React.createElement("h3", { className: "text-sm font-bold text-amber-900" }, "⚙️ Configuración del Coto (Reglas de Temporada)"),
+      React.createElement("div", { className: "mt-2 flex flex-col items-start gap-4 sm:flex-row sm:items-center" },
+        React.createElement("label", { className: "flex items-center gap-3 text-sm text-amber-950 font-semibold" },
+          "Máximo de días / salidas permitidas por cazador al mes:",
+          React.createElement("input", {
+            type: "number",
+            min: "1",
+            value: db.configuracion?.maximo_dias_mes || 10,
+            onChange: e => cambiarMaximoDiasMes(e.target.value),
+            className: "h-9 w-24 rounded border border-amber-300 bg-white px-2 text-center font-bold text-slate-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-100"
+          })
+        )
+      )
+    ),
+
     React.createElement("div", { className: "mb-5 flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 scrollbar-thin" }, 
-      [
-        ["usuarios", "users", "Usuarios"], 
-        ["precintos", "badge", "Precintos"], 
-        ["capturas", "camera", "Capturas"], 
-        ["configuracion", "settings", "Temporada / Config"],
-        ["datos", "database", "Base de datos"], 
-        ["estadisticas", "bar-chart-3", "Estadísticas"]
-      ].map(([key, icon, label]) => React.createElement("button", {
+      [["usuarios", "users", "Usuarios"], ["precintos", "badge", "Precintos"], ["capturas", "camera", "Capturas"], ["datos", "database", "Base de datos"], ["estadisticas", "bar-chart-3", "Estadísticas"]].map(([key, icon, label]) => React.createElement("button", {
         key: key,
         onClick: () => setTab(key),
         className: `inline-flex h-10 shrink-0 items-center gap-2 rounded px-3 text-sm font-bold ${tab === key ? "bg-forest-700 text-white" : "text-slate-600 hover:bg-slate-100"}`
@@ -779,40 +777,6 @@ function AdminArea({ user, db, setDb }) {
         ))
       )
     ), 
-    // MEJORA: Nueva pestaña visual para configurar el Máximo de Días y Bloquear/Permitir recogida general
-    tab === "configuracion" && React.createElement(Panel, { title: "Configuración global de la temporada" }, 
-      React.createElement("form", { onSubmit: actualizarConfiguracion, className: "max-w-xl space-y-6" }, 
-        React.createElement("div", { className: "rounded-lg border border-slate-200 bg-slate-50 p-4" }, 
-          React.createElement("h3", { className: "text-sm font-bold uppercase text-slate-500 mb-3" }, "Cupo Mensual / Temporada"), 
-          React.createElement("label", { className: "block" }, 
-            React.createElement("span", { className: "text-sm font-semibold text-slate-700" }, "Máximo de días/piezas permitidas por cazador"), 
-            React.createElement("input", {
-              type: "number",
-              value: cfgInput.maximoDias,
-              onChange: v => setCfgInput({ ...cfgInput, maximoDias: v.target.value }),
-              className: "mt-2 h-11 w-full rounded border border-slate-300 px-3 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100"
-            }), 
-            React.createElement("p", { className: "mt-1 text-xs text-slate-500" }, "Los cazadores que alcancen este número de capturas registradas no podrán solicitar más precintos.")
-          )
-        ), 
-        React.createElement("div", { className: "rounded-lg border border-slate-200 bg-slate-50 p-4" }, 
-          React.createElement("h3", { className: "text-sm font-bold uppercase text-slate-500 mb-3" }, "Control Maestro de Recogida"), 
-          React.createElement("label", { className: "block" }, 
-            React.createElement("span", { className: "text-sm font-semibold text-slate-700 block mb-2" }, "Estado de la recogida general"), 
-            React.createElement("select", {
-              value: cfgInput.precintosDesactivados ? "true" : "false",
-              onChange: e => setCfgInput({ ...cfgInput, precintosDesactivados: e.target.value === "true" }),
-              className: "h-11 w-full rounded border border-slate-300 px-3 bg-white"
-            }, 
-              React.createElement("option", { value: "false" }, "🟢 Permitir recogida normal (Temporada Abierta)"), 
-              React.createElement("option", { value: "true" }, "🔴 Bloquear recogida general (Cierre / Emergencia)")
-            ), 
-            React.createElement("p", { className: "mt-1 text-xs text-slate-500" }, "Bloquear recogida congela inmediatamente la solicitud de nuevos precintos para todos los usuarios a la vez.")
-          )
-        ), 
-        React.createElement("button", { className: "inline-flex h-12 items-center justify-center rounded bg-forest-700 px-6 font-bold text-white hover:bg-forest-900 shadow" }, "Guardar Configuración")
-      )
-    ), 
     tab === "datos" && React.createElement(Panel, { title: "Base de datos" }, 
       React.createElement("div", { className: "mb-5 flex flex-wrap gap-2" }, 
         React.createElement(ExportButton, { label: "Exportar CSV", data: db }), 
@@ -822,7 +786,7 @@ function AdminArea({ user, db, setDb }) {
         }, React.createElement(Icon, { name: "archive", className: "h-4 w-4" }), " Copias automáticas")
       ), 
       React.createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, 
-        ["configuracion", "usuarios", "precintos", "capturas", "logs"].map(key => React.createElement("div", { key: key, className: "rounded border border-slate-200 p-4" }, 
+        ["usuarios", "precintos", "capturas", "logs", "configuracion"].map(key => React.createElement("div", { key: key, className: "rounded border border-slate-200 p-4" }, 
           React.createElement("h3", { className: "mb-2 font-bold capitalize" }, key), 
           React.createElement("pre", { className: "max-h-72 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100 scrollbar-thin" }, 
             JSON.stringify(db[key], null, 2)
@@ -953,13 +917,7 @@ function Chart({ title, rows }) {
 function ExportButton({ label, data }) {
   function exportCsv() {
     const rows = [["tabla", "id", "datos"]];
-    Object.entries(data).forEach(([table, items]) => {
-      if(Array.isArray(items)) {
-        items.forEach(item => rows.push([table, item.id, JSON.stringify(item).replaceAll('"', '""')]));
-      } else {
-        rows.push([table, 0, JSON.stringify(items).replaceAll('"', '""')]);
-      }
-    });
+    Object.entries(data).forEach(([table, items]) => items.forEach(item => rows.push([table, item.id, JSON.stringify(item).replaceAll('"', '""')])));
     const csv = rows.map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -1022,8 +980,6 @@ function App() {
         if (respuesta.ok) {
           const data = await respuesta.json();
           if (data && data.usuarios) {
-            // Asegura que si los datos vienen del servidor sin el nodo configuracion, no se rompa la app
-            if (!data.configuracion) data.configuracion = initialDb.configuracion;
             setDbState(data);
             console.log("✅ Conexión con el servidor completada con éxito.");
           }
