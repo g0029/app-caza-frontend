@@ -309,6 +309,23 @@ function UserArea({ user, db, setDb }) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
     
+    // NUEVA REGLA: No permitir solicitar si ya tiene UN precinto asignado activo
+    const yaTieneAsignado = db.asignaciones.some(a => a.usuario === user.id && a.estado === "ASIGNADO");
+    if (yaTieneAsignado) {
+      return setMessage({ 
+        type: "error", 
+        text: "No puedes solicitar un nuevo precinto. Ya tienes uno activo en tu panel. Debes registrar su captura o devolverlo primero." 
+      });
+    }
+
+    // NUEVA REGLA ADMINISTRADOR: Comprobar si el administrador ha bloqueado el uso general de precintos
+    if (db.configuracion?.precintosDesactivados) {
+      return setMessage({
+        type: "error",
+        text: "El administrador ha desactivado temporalmente la recogida de precintos para toda la temporada."
+      });
+    }
+    
     const free = db.precintos.find(p => p.estado === "DISPONIBLE" && p.coto === pickup.coto);
     if (!free) return setMessage({ type: "error", text: `No quedan precintos disponibles para el ${pickup.coto}.` });
     
@@ -322,6 +339,20 @@ function UserArea({ user, db, setDb }) {
       fecha,
       estado: "ASIGNADO"
     };
+    const next = {
+      ...db,
+      precintos: db.precintos.map(p => p.id === free.id ? { ...p, estado: "ASIGNADO" } : p),
+      asignaciones: [assignment, ...db.asignaciones]
+    };
+    setDb(log(next, `Precinto ${free.numero_precinto} asignado a ${pickup.coto}`));
+    setPickup({ coto: COTOS[0], paraje: "" });
+    setReturnNumber(free.numero_precinto);
+    setMessage({
+      type: "success",
+      text: `Precinto asignado: ${free.numero_precinto} (${free.coto})`,
+      details: { ...assignment, numero: free.numero_precinto }
+    });
+  }
     const next = {
       ...db,
       precintos: db.precintos.map(p => p.id === free.id ? { ...p, estado: "ASIGNADO" } : p),
