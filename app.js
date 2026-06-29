@@ -107,7 +107,11 @@ const initialDb = {
     accion: "Sistema inicializado",
     usuario: "admin",
     fecha: new Date(Date.now() - 172800000).toISOString()
-  }]
+  }],
+  // NUEVO: Nodo de configuración global para activar/desactivar el gasto de precintos
+  configuracion: {
+    precintosDesactivados: false
+  }
 };
 
 const ICON_PATHS = {
