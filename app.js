@@ -107,7 +107,12 @@ const initialDb = {
     accion: "Sistema inicializado",
     usuario: "admin",
     fecha: new Date(Date.now() - 172800000).toISOString()
-  }]
+  }],
+  // NUEVO: Objeto de configuración global para almacenar los límites opcionales de días al mes
+  configuracion: {
+    precintosDesactivados: false,
+    maxDiasMes: "" // Vacío o nulo por defecto significa sin límites establecidos
+  }
 };
 
 const ICON_PATHS = {
@@ -309,7 +314,7 @@ function UserArea({ user, db, setDb }) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
     
-    // NUEVA REGLA: No permitir solicitar si ya tiene UN precinto asignado activo
+    // REGLA: No permitir solicitar si ya tiene UN precinto asignado activo
     const yaTieneAsignado = db.asignaciones.some(a => a.usuario === user.id && a.estado === "ASIGNADO");
     if (yaTieneAsignado) {
       return setMessage({ 
@@ -318,15 +323,42 @@ function UserArea({ user, db, setDb }) {
       });
     }
 
-    // NUEVA REGLA ADMINISTRADOR: Comprobar si el administrador ha bloqueado el uso general de precintos
+    // REGLA ADMINISTRADOR: Comprobar si el administrador ha bloqueado el uso general de precintos
     if (db.configuracion?.precintosDesactivados) {
       return setMessage({
         type: "error",
         text: "El administrador ha desactivado temporalmente la recogida de precintos para toda la temporada."
       });
     }
+
+    // NUEVA REGLA: Validar límite opcional de días máximos al mes configurados por el administrador
+    const maxDias = parseInt(db.configuracion?.maxDiasMes, 10);
+    if (!isNaN(maxDias) && maxDias > 0) {
+      const hoy = new Date();
+      const mesActual = hoy.getMonth();
+      const anioActual = hoy.getFullYear();
+
+      // Obtener todas las asignaciones históricas del usuario en este mes/año en curso
+      const asignacionesMes = db.asignaciones.filter(a => {
+        if (a.usuario !== user.id) return false;
+        const f = new Date(a.fecha);
+        return f.getMonth() === mesActual && f.getFullYear() === anioActual;
+      });
+
+      // Calcular cuántos días DIFERENTES se han solicitado precintos en el mes actual
+      const diasUnicos = new Set(asignacionesMes.map(a => new Date(a.fecha).getDate()));
+      const yaSolicitoHoy = diasUnicos.has(hoy.getDate());
+
+      // Si alcanzó el cupo y hoy es un día nuevo en el calendario, se bloquea la solicitud
+      if (diasUnicos.size >= maxDias && !yaSolicitoHoy) {
+        return setMessage({
+          type: "error",
+          text: `Has alcanzado el límite máximo de ${maxDias} días de solicitud permitidos para este mes.`
+        });
+      }
+    }
     
-    // MEJORADO: Ahora solo busca precintos que estén estrictamente "DISPONIBLE" (ignora los individuales que estén en "BLOQUEADO")
+    // FILTRADO INDIVIDUALIZADO: Solo busca precintos estrictamente "DISPONIBLE" (ignora individuales en "BLOQUEADO")
     const free = db.precintos.find(p => p.estado === "DISPONIBLE" && p.coto === pickup.coto);
     if (!free) return setMessage({ type: "error", text: `No quedan precintos disponibles para el ${pickup.coto}.` });
     
@@ -582,6 +614,18 @@ function AdminArea({ user, db, setDb }) {
     };
   }
 
+  // NUEVA FUNCIÓN: Permite al administrador guardar las restricciones globales de temporada
+  function cambiarConfiguracion(clave, valor) {
+    const next = {
+      ...db,
+      configuracion: {
+        ...db.configuracion,
+        [clave]: valor
+      }
+    };
+    setDb(addLog(next, `Configuración actualizada: ${clave} = ${valor}`));
+  }
+
   function createUser(event) {
     event.preventDefault();
     if (!newUser.nombre || !newUser.usuario || !newUser.password) return;
@@ -602,11 +646,10 @@ function AdminArea({ user, db, setDb }) {
     setDb(addLog(next, `${target.bloqueado ? "Desbloqueado" : "Bloqueado"} ${target.usuario}`));
   }
 
- function createSeal(event) {
+  function createSeal(event) {
     event.preventDefault();
     if (!newSeal.trim()) return;
     
-    // Validar si el número de precinto ya existe para evitar duplicados
     const existe = db.precintos.some(p => p.numero_precinto.toUpperCase() === newSeal.trim().toUpperCase());
     if (existe) {
       alert("Este número de precinto ya está registrado.");
@@ -624,12 +667,11 @@ function AdminArea({ user, db, setDb }) {
     setNewSeal("");
   }
 
-  // NUEVA FUNCIÓN: Alternar estado de precinto individual de forma manual (Activar / Desactivar)
+  // NUEVA FUNCIÓN: Alternar estado de precinto individual de forma manual 1 a 1 (Activar / Desactivar)
   function toggleSealStatus(id) {
     const target = db.precintos.find(p => p.id === id);
     if (!target) return;
 
-    // Solo se permite bloquear o desbloquear si el precinto no ha sido asignado ni usado en el campo
     if (target.estado !== "DISPONIBLE" && target.estado !== "BLOQUEADO") {
       alert(`No se puede modificar este precinto porque su estado actual es ${target.estado}.`);
       return;
@@ -649,7 +691,6 @@ function AdminArea({ user, db, setDb }) {
     const seal = db.precintos.find(p => p.id === id);
     if (!seal) return;
 
-    // CONTROL DE SEGURIDAD: No permitir borrar precintos que ya se han usado o están asignados
     if (seal.estado !== "DISPONIBLE" && seal.estado !== "BLOQUEADO") {
       alert(`No se puede eliminar el precinto ${seal.numero_precinto} porque su estado es ${seal.estado}.`);
       return;
@@ -659,7 +700,6 @@ function AdminArea({ user, db, setDb }) {
     setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado`));
   }
 
-  // FILTRADO SEGURO: Evita que la app se rompa si un precinto o usuario ha sido eliminado
   const filteredCaptures = db.capturas.filter(c => {
     const sealObj = db.precintos.find(p => p.id === c.precinto);
     const seal = sealObj ? sealObj.numero_precinto : "Precinto Eliminado";
@@ -773,7 +813,35 @@ function AdminArea({ user, db, setDb }) {
         ))
       )
     ), 
-    tab === "datos" && React.createElement(Panel, { title: "Base de datos" }, 
+    tab === "datos" && React.createElement(Panel, { title: "Configuración del Sistema y Base de datos" }, 
+      // NUEVO: Formulario para gestionar los parámetros globales del sistema (Días al mes / Pausa total)
+      React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4" },
+        React.createElement("h3", { className: "mb-4 font-bold text-slate-800" }, "Restricciones globales de la temporada"),
+        React.createElement("div", { className: "grid gap-4 sm:grid-cols-2" },
+          React.createElement("label", { className: "block" },
+            React.createElement("span", { className: "text-sm font-semibold text-slate-700" }, "Máximo de días al mes por cazador (dejar vacío = sin límite)"),
+            React.createElement("input", {
+              type: "number",
+              min: "1",
+              placeholder: "Ej. 5",
+              value: db.configuracion?.maxDiasMes || "",
+              onChange: e => cambiarConfiguracion("maxDiasMes", e.target.value),
+              className: "mt-2 h-11 w-full rounded border border-slate-300 px-3 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100"
+            })
+          ),
+          React.createElement("label", { className: "block" },
+            React.createElement("span", { className: "text-sm font-semibold text-slate-700" }, "Estado de la recogida general"),
+            React.createElement("select", {
+              value: db.configuracion?.precintosDesactivados ? "desactivado" : "activado",
+              onChange: e => cambiarConfiguracion("precintosDesactivados", e.target.value === "desactivado"),
+              className: "mt-2 h-11 w-full rounded border border-slate-300 px-3 bg-white"
+            },
+              React.createElement("option", { value: "activado" }, "Permitir recogida normal"),
+              React.createElement("option", { value: "desactivado" }, "Bloquear recogida general (Mantenimiento/Fin de temporada)")
+            )
+          )
+        )
+      ),
       React.createElement("div", { className: "mb-5 flex flex-wrap gap-2" }, 
         React.createElement(ExportButton, { label: "Exportar CSV", data: db }), 
         React.createElement("button", {
