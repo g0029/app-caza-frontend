@@ -619,16 +619,69 @@ function AdminArea({ user, db, setDb }) {
     setDb(addLog(next, `${target.bloqueado ? "Desbloqueado" : "Bloqueado"} ${target.usuario}`));
   }
 
- function createSeal(event) {
+function createSeal(event) {
     event.preventDefault();
     if (!newSeal.trim()) return;
+
+    const valorInput = newSeal.trim().toUpperCase();
     
-    // Validar si el número de precinto ya existe para evitar duplicados
-    const existe = db.precintos.some(p => p.numero_precinto.toUpperCase() === newSeal.trim().toUpperCase());
-    if (existe) {
-      alert("Este número de precinto ya está registrado.");
-      return;
+    // Comprobamos si el administrador ha escrito un número para la creación masiva (ej: "15")
+    const esCreacionMasiva = !isNaN(valorInput) && parseInt(valorInput) > 0;
+    
+    let nuevosPrecintos = [];
+    
+    if (esCreacionMasiva) {
+      const cantidad = parseInt(valorInput);
+      
+      // Buscamos cuál es el último número secuencial para continuar la serie de forma correlativa
+      let ultimoNumero = 0;
+      db.precintos.forEach(p => {
+        const coincidencia = p.numero_precinto.match(/\d+/); // Extrae los números del string
+        if (coincidencia) {
+          const num = parseInt(coincidencia[0]);
+          if (num > ultimoNumero) ultimoNumero = num;
+        }
+      });
+
+      // Generamos el lote masivo (ej: si el último era 18, genera PCD-00019, PCD-00020...)
+      for (let i = 1; i <= cantidad; i++) {
+        const siguienteID = Date.now() + i; // IDs únicos basados en tiempo
+        const siguienteNumero = ultimoNumero + i;
+        const numero_precinto = `PCD-${String(siguienteNumero).padStart(5, "0")}`;
+        
+        nuevosPrecintos.push({
+          id: siguienteID,
+          numero_precinto: numero_precinto,
+          estado: "DISPONIBLE",
+          coto: newSealCoto
+        });
+      }
+      
+      const next = { ...db, precintos: [...nuevosPrecintos, ...db.precintos] };
+      setDb(addLog(next, `Lote masivo de ${cantidad} precintos creado para ${newSealCoto}`));
+      alert(`¡Se han generado exitosamente ${cantidad} precintos secuenciales!`);
+      
+    } else {
+      // CREACIÓN INDIVIDUAL NORMAL (Si escribe texto como "PCD-ABCDE")
+      const existe = db.precintos.some(p => p.numero_precinto === valorInput);
+      if (existe) {
+        alert("Este número de precinto ya está registrado.");
+        return;
+      }
+
+      const item = {
+        id: Date.now(),
+        numero_precinto: valorInput,
+        estado: "DISPONIBLE",
+        coto: newSealCoto
+      };
+      
+      const next = { ...db, precintos: [item, ...db.precintos] };
+      setDb(addLog(next, `Precinto ${item.numero_precinto} creado para ${item.coto}`));
     }
+
+    setNewSeal("");
+  }
 
     const item = {
       id: Date.now(),
