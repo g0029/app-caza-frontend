@@ -4,7 +4,7 @@ const {
   useState
 } = React;
 
-// Función nativa para comprimir imágenes antes de enviarlas al servidor
+// NUEVO: Función nativa para comprimir imágenes antes de enviarlas al servidor
 function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -14,6 +14,7 @@ function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
       let width = img.width;
       let height = img.height;
 
+      // Calculamos las nuevas dimensiones manteniendo la proporción original
       if (width > maxWidth) {
         height = Math.round((height * maxWidth) / width);
         width = maxWidth;
@@ -25,12 +26,14 @@ function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
+      // Exportamos de nuevo a Base64 pero comprimido en formato JPEG (mucho más ligero que PNG)
       const resultadoBase64 = canvas.toDataURL('image/jpeg', quality);
       resolve(resultadoBase64);
     };
   });
 }
 
+// 1. CAMBIADO: Nuevos nombres de cotos
 const COTOS = ["Coto Nuevo", "Coto Viejo"];
 
 const STATUS_STYLE = {
@@ -104,11 +107,7 @@ const initialDb = {
     accion: "Sistema inicializado",
     usuario: "admin",
     fecha: new Date(Date.now() - 172800000).toISOString()
-  }],
-  // INTEGRADO: Nodo para control global de activación/desactivación
-  configuracion: {
-    precintosDesactivados: false
-  }
+  }]
 };
 
 const ICON_PATHS = {
@@ -190,9 +189,12 @@ function Login({ db, onLogin }) {
 
   function submit(event) {
     event.preventDefault();
+    
     const found = db.usuarios.find(u => u.usuario === form.usuario && u.password === form.password);
+    
     if (!found) return setError("Credenciales incorrectas.");
     if (found.bloqueado) return setError("El acceso de este usuario está bloqueado.");
+    
     localStorage.setItem("usuario-sesion", JSON.stringify(found));
     onLogin(found);
   }
@@ -307,7 +309,7 @@ function UserArea({ user, db, setDb }) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
     
-    // REGLA: No permitir solicitar si ya tiene UN precinto asignado activo
+    // NUEVA REGLA: No permitir solicitar si ya tiene UN precinto asignado activo
     const yaTieneAsignado = db.asignaciones.some(a => a.usuario === user.id && a.estado === "ASIGNADO");
     if (yaTieneAsignado) {
       return setMessage({ 
@@ -316,14 +318,15 @@ function UserArea({ user, db, setDb }) {
       });
     }
 
-    // REGLA CONFIGURACIÓN GLOBAL: Comprobar si el administrador ha desactivado el sistema
+    // NUEVA REGLA ADMINISTRADOR: Comprobar si el administrador ha bloqueado el uso general de precintos
     if (db.configuracion?.precintosDesactivados) {
       return setMessage({
         type: "error",
-        text: "El administrador ha desactivado temporalmente la recogida de precintos."
+        text: "El administrador ha desactivado temporalmente la recogida de precintos para toda la temporada."
       });
     }
     
+    // MEJORADO: Ahora solo busca precintos que estén estrictamente "DISPONIBLE" (ignora los individuales que estén en "BLOQUEADO")
     const free = db.precintos.find(p => p.estado === "DISPONIBLE" && p.coto === pickup.coto);
     if (!free) return setMessage({ type: "error", text: `No quedan precintos disponibles para el ${pickup.coto}.` });
     
@@ -337,13 +340,11 @@ function UserArea({ user, db, setDb }) {
       fecha,
       estado: "ASIGNADO"
     };
-    
     const next = {
       ...db,
       precintos: db.precintos.map(p => p.id === free.id ? { ...p, estado: "ASIGNADO" } : p),
       asignaciones: [assignment, ...db.asignaciones]
     };
-    
     setDb(log(next, `Precinto ${free.numero_precinto} asignado a ${pickup.coto}`));
     setPickup({ coto: COTOS[0], paraje: "" });
     setReturnNumber(free.numero_precinto);
@@ -455,10 +456,9 @@ function UserArea({ user, db, setDb }) {
               ))
             )
           ), 
-          React.createElement("button", { 
-            disabled: myAssignments.length > 0,
-            className: `inline-flex h-12 items-center justify-center gap-2 rounded px-5 font-bold text-white ${myAssignments.length > 0 ? "bg-slate-400 cursor-not-allowed" : "bg-forest-700 hover:bg-forest-900"}` 
-          }, React.createElement(Icon, { name: "send" }), myAssignments.length > 0 ? "Ya tienes un precinto activo" : " Solicitar Precinto")
+          React.createElement("button", { className: "inline-flex h-12 items-center justify-center gap-2 rounded bg-forest-700 px-5 font-bold text-white hover:bg-forest-900" }, 
+            React.createElement(Icon, { name: "send" }), " Solicitar Precinto"
+          )
         ), 
         mode === "devolver" && React.createElement("form", { onSubmit: returnSeal, className: "grid gap-4" }, 
           React.createElement("h3", { className: "text-xl font-bold" }, "Devolver precinto"), 
@@ -606,65 +606,52 @@ function AdminArea({ user, db, setDb }) {
     event.preventDefault();
     if (!newSeal.trim()) return;
     
-    const valorInput = newSeal.trim().toUpperCase();
-    const esCreacionMasiva = !isNaN(valorInput) && parseInt(valorInput) > 0;
-    
-    let nuevosPrecintos = [];
-    
-    if (esCreacionMasiva) {
-      const cantidad = parseInt(valorInput);
-      let ultimoNumero = 0;
-      
-      db.precintos.forEach(p => {
-        const coincidencia = p.numero_precinto.match(/\d+/);
-        if (coincidencia) {
-          const num = parseInt(coincidencia[0]);
-          if (num > ultimoNumero) ultimoNumero = num;
-        }
-      });
-
-      for (let i = 1; i <= cantidad; i++) {
-        const siguienteID = Date.now() + i;
-        const siguienteNumero = ultimoNumero + i;
-        const numero_precinto = `PCD-${String(siguienteNumero).padStart(5, "0")}`;
-        
-        nuevosPrecintos.push({
-          id: siguienteID,
-          numero_precinto: numero_precinto,
-          estado: "DISPONIBLE",
-          coto: newSealCoto
-        });
-      }
-      
-      const next = { ...db, precintos: [...nuevosPrecintos, ...db.precintos] };
-      setDb(addLog(next, `Lote masivo de ${cantidad} precintos creado para ${newSealCoto}`));
-      alert(`¡Se han generado exitosamente ${cantidad} precintos secuenciales!`);
-      
-    } else {
-      const existe = db.precintos.some(p => p.numero_precinto === valorInput);
-      if (existe) {
-        alert("Este número de precinto ya está registrado.");
-        return;
-      }
-
-      const item = {
-        id: Date.now(),
-        numero_precinto: valorInput,
-        estado: "DISPONIBLE",
-        coto: newSealCoto
-      };
-      const next = { ...db, precintos: [item, ...db.precintos] };
-      setDb(addLog(next, `Precinto ${item.numero_precinto} creado para ${item.coto}`));
+    // Validar si el número de precinto ya existe para evitar duplicados
+    const existe = db.precintos.some(p => p.numero_precinto.toUpperCase() === newSeal.trim().toUpperCase());
+    if (existe) {
+      alert("Este número de precinto ya está registrado.");
+      return;
     }
+
+    const item = {
+      id: Date.now(),
+      numero_precinto: newSeal.trim().toUpperCase(),
+      estado: "DISPONIBLE",
+      coto: newSealCoto
+    };
+    const next = { ...db, precintos: [item, ...db.precintos] };
+    setDb(addLog(next, `Precinto ${item.numero_precinto} creado para ${item.coto}`));
     setNewSeal("");
+  }
+
+  // NUEVA FUNCIÓN: Alternar estado de precinto individual de forma manual (Activar / Desactivar)
+  function toggleSealStatus(id) {
+    const target = db.precintos.find(p => p.id === id);
+    if (!target) return;
+
+    // Solo se permite bloquear o desbloquear si el precinto no ha sido asignado ni usado en el campo
+    if (target.estado !== "DISPONIBLE" && target.estado !== "BLOQUEADO") {
+      alert(`No se puede modificar este precinto porque su estado actual es ${target.estado}.`);
+      return;
+    }
+
+    const nuevoEstado = target.estado === "DISPONIBLE" ? "BLOQUEADO" : "DISPONIBLE";
+    
+    const next = {
+      ...db,
+      precintos: db.precintos.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p)
+    };
+    
+    setDb(addLog(next, `Precinto ${target.numero_precinto} cambiado individualmente a ${nuevoEstado}`));
   }
 
   function removeSeal(id) {
     const seal = db.precintos.find(p => p.id === id);
     if (!seal) return;
 
-    if (seal.estado !== "DISPONIBLE") {
-      alert(`No se puede eliminar el precinto ${seal.numero_precinto} because su estado es ${seal.estado}.`);
+    // CONTROL DE SEGURIDAD: No permitir borrar precintos que ya se han usado o están asignados
+    if (seal.estado !== "DISPONIBLE" && seal.estado !== "BLOQUEADO") {
+      alert(`No se puede eliminar el precinto ${seal.numero_precinto} porque su estado es ${seal.estado}.`);
       return;
     }
 
@@ -672,6 +659,7 @@ function AdminArea({ user, db, setDb }) {
     setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado`));
   }
 
+  // FILTRADO SEGURO: Evita que la app se rompa si un precinto o usuario ha sido eliminado
   const filteredCaptures = db.capturas.filter(c => {
     const sealObj = db.precintos.find(p => p.id === c.precinto);
     const seal = sealObj ? sealObj.numero_precinto : "Precinto Eliminado";
@@ -726,47 +714,46 @@ function AdminArea({ user, db, setDb }) {
       )
     ), 
     tab === "precintos" && React.createElement(Panel, { title: "Gestión de precintos" }, 
-      // INTERFAZ INTEGRADA: Panel de activación/desactivación global del sistema
-      React.createElement("div", { className: "mb-6 flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center" },
-        React.createElement("div", null,
-          React.createElement("h3", { className: "font-bold text-slate-800" }, "Estado Global del Sistema"),
-          React.createElement("p", { className: "text-xs text-slate-500" }, "Si lo desactivas, ningún cazador podrá solicitar precintos nuevos en el campo.")
-        ),
-        React.createElement("button", {
-          type: "button",
-          onClick: () => {
-            const estadoActual = db.configuracion?.precintosDesactivados || false;
-            const next = { ...db, configuracion: { ...db.configuracion, precintosDesactivados: !estadoActual } };
-            setDb(addLog(next, `Sistema de precintos ${!estadoActual ? 'DESACTIVADO' : 'ACTIVADO'} por el administrador`));
-          },
-          className: `inline-flex h-11 items-center gap-2 rounded px-5 font-bold text-white transition ${(db.configuracion?.precintosDesactivados) ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`
-        }, 
-          React.createElement(Icon, { name: (db.configuracion?.precintosDesactivados) ? "x" : "check-circle-2", className: "h-5 w-5" }),
-          (db.configuracion?.precintosDesactivados) ? "Precintos: BLOQUEADOS" : "Precintos: ACTIVOS"
-        )
-      ),
-      // INTERFAZ MEJORADA: Permite número para crear lote (Ej: "15") o texto para uno manual
       React.createElement("form", { onSubmit: createSeal, className: "mb-5 flex flex-col gap-3 sm:flex-row" }, 
-        React.createElement(Input, { placeholder: "Escribe '15' para lote secuencial o el código manual", value: newSeal, onChange: setNewSeal }), 
+        React.createElement(Input, { placeholder: "Nuevo número de precinto", value: newSeal, onChange: setNewSeal }), 
         React.createElement("select", {
           value: newSealCoto,
           onChange: e => setNewSealCoto(e.target.value),
-          className: "h-11 rounded border border-slate-300 px-3 bg-white"
+          className: "h-11 rounded border border-slate-300 px-3"
         }, COTOS.map(c => React.createElement("option", { key: c, value: c }, c))),
-        React.createElement("button", { className: "h-11 rounded bg-forest-700 px-5 font-bold text-white hover:bg-forest-900" }, "Crear / reponer stock")
+        React.createElement("button", { className: "h-11 rounded bg-forest-700 px-5 font-bold text-white" }, "Crear / reponer stock")
       ), 
-      React.createElement(Table, { headers: ["Número", "Coto asignado", "Estado", "Asignación cazador", "Acción"] }, 
+      // MODIFICADO: Nueva columna de "Acciones individualizadas" con el botón dinámico de Activar/Desactivar manual 1 a 1
+      React.createElement(Table, { headers: ["Número", "Coto asignado", "Estado", "Asignación cazador", "Acciones individualizadas"] }, 
         db.precintos.map(p => {
           const assignment = db.asignaciones.find(a => a.precinto === p.id && a.estado === "ASIGNADO");
+          
+          const puedeModificar = p.estado === "DISPONIBLE" || p.estado === "BLOQUEADO";
+          const textoBotonActivar = p.estado === "BLOQUEADO" ? "Activar" : "Desactivar";
+          const colorBotonActivar = p.estado === "BLOQUEADO" 
+            ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" 
+            : "border-amber-200 text-amber-700 hover:bg-amber-50";
+
           return React.createElement("tr", { key: p.id, className: "border-t border-slate-100" }, 
             React.createElement(Td, null, p.numero_precinto), 
             React.createElement(Td, null, p.coto || "No especificado"), 
             React.createElement(Td, null, React.createElement(Badge, { tone: p.estado }, p.estado)), 
             React.createElement(Td, null, assignment ? `${assignment.coto} · ${assignment.paraje}` : "Sin asignación activa"), 
-            React.createElement(Td, null, React.createElement("button", {
-              onClick: () => removeSeal(p.id),
-              className: "rounded border border-red-200 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50"
-            }, "Eliminar"))
+            React.createElement(Td, null, 
+              React.createElement("div", { className: "flex gap-2" },
+                React.createElement("button", {
+                  type: "button",
+                  disabled: !puedeModificar,
+                  onClick: () => toggleSealStatus(p.id),
+                  className: `rounded border px-2.5 py-1 text-xs font-semibold transition ${!puedeModificar ? "border-slate-100 text-slate-400 bg-slate-50 cursor-not-allowed" : colorBotonActivar}`
+                }, textoBotonActivar),
+                React.createElement("button", {
+                  type: "button",
+                  onClick: () => removeSeal(p.id),
+                  className: "rounded border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                }, "Eliminar")
+              )
+            )
           );
         })
       )
@@ -1082,5 +1069,4 @@ function App() {
     : React.createElement(UserArea, { user: user, db: db, setDb: setDb });
 }
 
-// Inicialización en el DOM HTML
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
