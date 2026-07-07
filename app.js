@@ -4,7 +4,6 @@ const {
   useState
 } = React;
 
-// NUEVO: Función nativa para comprimir imágenes antes de enviarlas al servidor
 function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -13,27 +12,20 @@ function comprimirImagen(base64Str, maxWidth = 1024, quality = 0.7) {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
-
-      // Calculamos las nuevas dimensiones manteniendo la proporción original
       if (width > maxWidth) {
         height = Math.round((height * maxWidth) / width);
         width = maxWidth;
       }
-
       canvas.width = width;
       canvas.height = height;
-
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
-
-      // Exportamos de nuevo a Base64 pero comprimido en formato JPEG (mucho más ligero que PNG)
       const resultadoBase64 = canvas.toDataURL('image/jpeg', quality);
       resolve(resultadoBase64);
     };
   });
 }
 
-// 1. CAMBIADO: Nuevos nombres de cotos
 const COTOS = ["Coto Nuevo", "Coto Viejo"];
 
 const STATUS_STYLE = {
@@ -44,74 +36,20 @@ const STATUS_STYLE = {
 };
 
 const initialDb = {
-  usuarios: [{
-    id: 1,
-    nombre: "Ana Martín",
-    usuario: "ana",
-    password: "1234",
-    rol: "cazador",
-    bloqueado: false
-  }, {
-    id: 2,
-    nombre: "Carlos Vega",
-    usuario: "carlos",
-    password: "1234",
-    rol: "cazador",
-    bloqueado: false
-  }, {
-    id: 3,
-    nombre: "Admin Coto",
-    usuario: "admin",
-    password: "admin",
-    rol: "admin",
-    bloqueado: false
-  }],
-  precintos: Array.from({
-    length: 18
-  }, (_, index) => ({
+  usuarios: [
+    { id: 1, nombre: "Ana Martín", usuario: "ana", password: "1234", rol: "cazador", bloqueado: false, maximo_dias_mes: 10 },
+    { id: 2, nombre: "Carlos Vega", usuario: "carlos", password: "1234", rol: "cazador", bloqueado: false, maximo_dias_mes: 10 },
+    { id: 3, nombre: "Admin Coto", usuario: "admin", password: "admin", rol: "admin", bloqueado: false, maximo_dias_mes: 10 }
+  ],
+  precintos: Array.from({ length: 18 }, (_, index) => ({
     id: index + 1,
     numero_precinto: `PCD-${String(index + 1).padStart(5, "0")}`,
     estado: index < 2 ? "ASIGNADO" : index === 2 ? "USADO" : "DISPONIBLE",
     coto: index < 9 ? COTOS[0] : COTOS[1] 
   })),
-  asignaciones: [{
-    id: 1,
-    usuario: 1,
-    precinto: 1,
-    coto: COTOS[0],
-    paraje: "Barranco del Agua",
-    fecha: new Date(Date.now() - 86400000).toISOString(),
-    estado: "ASIGNADO"
-  }, {
-    id: 2,
-    usuario: 2,
-    precinto: 2,
-    coto: COTOS[1],
-    paraje: "Umbría Alta",
-    fecha: new Date(Date.now() - 43200000).toISOString(),
-    estado: "ASIGNADO"
-  }],
-  capturas: [{
-    id: 1,
-    precinto: 3,
-    usuario: 1,
-    imagen: "",
-    observaciones: "Registro de prueba",
-    fecha: new Date(Date.now() - 172800000).toISOString(),
-    coto: COTOS[0],
-    paraje: "Las Lomas",
-    estado: "USADO"
-  }],
-  logs: [{
-    id: 1,
-    accion: "Sistema inicializado",
-    usuario: "admin",
-    fecha: new Date(Date.now() - 172800000).toISOString()
-  }],
-  // MEJORA: Objeto global de configuración persistente para Supabase
-  configuracion: {
-    maximo_dias_mes: 10
-  }
+  asignaciones: [],
+  capturas: [],
+  logs: [{ id: 1, accion: "Sistema inicializado", usuario: "admin", fecha: new Date().toISOString() }]
 };
 
 const ICON_PATHS = {
@@ -193,9 +131,7 @@ function Login({ db, onLogin }) {
 
   function submit(event) {
     event.preventDefault();
-    
     const found = db.usuarios.find(u => u.usuario === form.usuario && u.password === form.password);
-    
     if (!found) return setError("Credenciales incorrectas.");
     if (found.bloqueado) return setError("El acceso de este usuario está bloqueado.");
     
@@ -286,26 +222,12 @@ function UserArea({ user, db, setDb }) {
   const myAssignments = db.asignaciones.filter(a => a.usuario === user.id && a.estado === "ASIGNADO");
   const latestAssignment = [...myAssignments].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
   const latestSeal = latestAssignment && db.precintos.find(p => p.id === latestAssignment.precinto);
+  
   const occupiedParajes = db.asignaciones.filter(a => a.estado === "ASIGNADO" && a.usuario !== user.id && a.coto === pickup.coto).map(a => ({
     ...a,
     usuarioNombre: db.usuarios.find(u => u.id === a.usuario)?.nombre || "Otro cazador",
     precintoNumero: db.precintos.find(p => p.id === a.precinto)?.numero_precinto || ""
   }));
-
-  // MEJORA: Calcular dinámicamente las salidas del cazador en el mes calendario actual
-  const salidasEsteMes = useMemo(() => {
-    const ahora = new Date();
-    const mesActual = ahora.getMonth(); // 0 = Enero, 1 = Febrero...
-    const anioActual = ahora.getFullYear();
-    
-    return db.asignaciones.filter(a => {
-      if (a.usuario !== user.id) return false;
-      const fechaAsignacion = new Date(a.fecha);
-      return fechaAsignacion.getMonth() === mesActual && fechaAsignacion.getFullYear() === anioActual;
-    }).length;
-  }, [db.asignaciones, user.id]);
-
-  const limiteMensual = db.configuracion?.maximo_dias_mes || 10;
 
   function salir() {
     localStorage.removeItem("usuario-sesion");
@@ -327,22 +249,16 @@ function UserArea({ user, db, setDb }) {
   function requestSeal(event) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
-    // Dentro de la función requestSeal en UserArea:
-const salidasEsteMes = db.asignaciones.filter(a => a.usuario === user.id && a.estado === "USADO").length; 
-const limiteCazador = user.maximo_dias_mes || 10;
+    
+    if (myAssignments.length >= 1) {
+      return setMessage({ type: "error", text: "Ya tienes un precinto activo asignado. Debes devolverlo o registrar una captura antes de solicitar otro." });
+    }
 
-if (salidasEsteMes >= limiteCazador) {
-  return setMessage({ 
-    type: "error", 
-    text: `No puedes solicitar más precintos. Has alcanzado tu límite máximo de ${limiteCazador} salidas este mes.` 
-  });
-}
-    // CAMBIADO: Reemplazado el bloqueo de "1 activo" por la validación del cupo mensual dinámico de Supabase
-    if (salidasEsteMes >= limiteMensual) {
-      return setMessage({ 
-        type: "error", 
-        text: `No puedes solicitar más precintos. Has agotado tus ${limiteMensual} días/salidas de caza autorizadas para este mes calendario.` 
-      });
+    // NUEVO: Validar límite de salidas mensuales configuradas por el admin
+    const salidasEsteMes = db.asignaciones.filter(a => a.usuario === user.id && a.estado === "USADO").length;
+    const limiteCazador = user.maximo_dias_mes || 10;
+    if (salidasEsteMes >= limiteCazador) {
+      return setMessage({ type: "error", text: `Límite alcanzado. No puedes solicitar más precintos, has completado tu cupo de ${limiteCazador} salidas este mes.` });
     }
     
     const free = db.precintos.find(p => p.estado === "DISPONIBLE" && p.coto === pickup.coto);
@@ -435,11 +351,7 @@ if (salidasEsteMes >= limiteCazador) {
     React.createElement("section", { className: "mb-6 flex flex-col justify-between gap-4 rounded-lg bg-forest-900 p-5 text-white sm:flex-row sm:items-center" }, 
       React.createElement("div", null, 
         React.createElement("p", { className: "text-sm font-semibold text-forest-100" }, "Área de Usuario"), 
-        React.createElement("h2", { className: "text-2xl font-black" }, "Operativa en campo"),
-        // MEJORA VISUAL: Texto informativo del estado del cupo mensual para el cazador
-        React.createElement("p", { className: "text-xs font-semibold text-emerald-300 mt-1" }, 
-          `Consumo de cupo: ${salidasEsteMes} de ${limiteMensual} días de caza utilizados este mes.`
-        )
+        React.createElement("h2", { className: "text-2xl font-black" }, "Operativa en campo")
       ), 
       React.createElement("div", { className: "grid grid-cols-3 gap-2 text-center" }, 
         React.createElement(Metric, { label: "Disponibles", value: db.precintos.filter(p => p.estado === "DISPONIBLE").length, dark: true }), 
@@ -525,7 +437,7 @@ if (salidasEsteMes >= limiteCazador) {
           React.createElement("label", null, 
             React.createElement("span", { className: "text-sm font-semibold" }, "Observaciones"), 
             React.createElement("textarea", {
-              value: capture.observaciones,
+              value: capture.observations,
               onChange: e => setCapture({ ...capture, observaciones: e.target.value }),
               rows: "3",
               className: "mt-2 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-forest-500 focus:ring-4 focus:ring-forest-100"
@@ -579,30 +491,7 @@ function AdminArea({ user, db, setDb }) {
   const [newSeal, setNewSeal] = useState("");
   const [newSealCoto, setNewSealCoto] = useState(COTOS[0]);
   const [newUser, setNewUser] = useState({ nombre: "", usuario: "", password: "", rol: "cazador" });
-  // Añade esta función dentro de AdminArea para aplicar el cambio a todos los cazadores:
-function cambiarLimiteMensualGlobal(nuevoLimite) {
-  const limiteNumero = parseInt(nuevoLimite) || 10;
-  const next = {
-    ...db,
-    usuarios: db.usuarios.map(u => u.rol === 'cazador' ? { ...u, maximo_dias_mes: limiteNumero } : u)
-  };
-  setDb(addLog(next, `Límite mensual actualizado globalmente a ${limiteNumero} días`));
-}
-
-// Y en la parte visual (JSX) añade esta tarjeta de control:
-React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4" }, 
-  React.createElement("h3", { className: "text-md font-bold text-slate-700 flex items-center gap-2" }, "⚙️ Configuración del Coto (Reglas de Temporada)"),
-  React.createElement("p", { className: "text-xs text-slate-500 mt-1" }, "Establece el número máximo de salidas permitidas para los cazadores en el mes actual."),
-  React.createElement("div", { className: "mt-3 flex items-center gap-4 max-w-xs" },
-    React.createElement("input", {
-      type: "number",
-      value: db.usuarios.find(u => u.rol === 'cazador')?.maximo_dias_mes || 10,
-      onChange: e => cambiarLimiteMensualGlobal(e.target.value),
-      className: "h-10 w-24 text-center rounded border border-slate-300 font-bold"
-    }),
-    React.createElement("span", { className: "text-sm font-semibold text-slate-600" }, "días / salidas al mes")
-  )
-)
+  
   const stats = useMemo(() => ({
     disponibles: db.precintos.filter(p => p.estado === "DISPONIBLE").length,
     asignados: db.precintos.filter(p => p.estado === "ASIGNADO").length,
@@ -627,25 +516,24 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
     };
   }
 
-  // MEJORA: Modificar el valor del cupo mensual en la BD estructurada y empujarlo a Supabase mediante setDb
-  function cambiarMaximoDiasMes(nuevoLimite) {
-    const valorNumero = parseInt(nuevoLimite) || 1;
+  // NUEVO: Función encargada de actualizar a todos los cazadores y forzar el POST sincrónico a Supabase
+  function cambiarLimiteMensualGlobal(nuevoLimite) {
+    const limiteNumero = parseInt(nuevoLimite) || 10;
     const next = {
       ...db,
-      configuracion: {
-        ...db.configuracion,
-        maximo_dias_mes: valorNumero
-      }
+      usuarios: db.usuarios.map(u => u.rol === 'cazador' ? { ...u, maximo_dias_mes: limiteNumero } : u)
     };
-    setDb(addLog(next, `Límite de salidas/días mensuales actualizado a: ${valorNumero}`));
+    setDb(addLog(next, `Límite mensual actualizado globalmente a ${limiteNumero} días`));
   }
 
   function createUser(event) {
     event.preventDefault();
     if (!newUser.nombre || !newUser.usuario || !newUser.password) return;
+    const limiteGlobalActual = db.usuarios.find(u => u.rol === 'cazador')?.maximo_dias_mes || 10;
+    
     const next = {
       ...db,
-      usuarios: [{ id: Date.now(), ...newUser, bloqueado: false }, ...db.usuarios]
+      usuarios: [{ id: Date.now(), ...newUser, maximo_dias_mes: limiteGlobalActual, bloqueado: false }, ...db.usuarios]
     };
     setDb(addLog(next, `Usuario ${newUser.usuario} creado`));
     setNewUser({ nombre: "", usuario: "", password: "", rol: "cazador" });
@@ -660,23 +548,13 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
     setDb(addLog(next, `${target.bloqueado ? "Desbloqueado" : "Bloqueado"} ${target.usuario}`));
   }
 
- function createSeal(event) {
+  function createSeal(event) {
     event.preventDefault();
     if (!newSeal.trim()) return;
-    
-    // Validar si el número de precinto ya existe para evitar duplicados
     const existe = db.precintos.some(p => p.numero_precinto.toUpperCase() === newSeal.trim().toUpperCase());
-    if (existe) {
-      alert("Este número de precinto ya está registrado.");
-      return;
-    }
+    if (existe) return alert("Este número de precinto ya está registrado.");
 
-    const item = {
-      id: Date.now(),
-      numero_precinto: newSeal.trim().toUpperCase(),
-      estado: "DISPONIBLE", 
-      coto: newSealCoto
-    };
+    const item = { id: Date.now(), numero_precinto: newSeal.trim().toUpperCase(), estado: "DISPONIBLE", coto: newSealCoto };
     const next = { ...db, precintos: [item, ...db.precintos] };
     setDb(addLog(next, `Precinto ${item.numero_precinto} creado para ${item.coto}`));
     setNewSeal("");
@@ -685,27 +563,20 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
   function removeSeal(id) {
     const seal = db.precintos.find(p => p.id === id);
     if (!seal) return;
-
-    // CONTROL DE SEGURIDAD: No permitir borrar precintos que ya se han usado o están asignados
-    if (seal.estado !== "DISPONIBLE") {
-      alert(`No se puede eliminar el precinto ${seal.numero_precinto} because su estado es ${seal.estado}.`);
-      return;
-    }
+    if (seal.estado !== "DISPONIBLE") return alert(`No se puede eliminar porque está ${seal.estado}.`);
 
     const next = { ...db, precintos: db.precintos.filter(p => p.id !== id) };
     setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado`));
   }
 
-  // FILTRADO SEGURO: Evita que la app se rompa si un precinto o usuario ha sido eliminado
   const filteredCaptures = db.capturas.filter(c => {
-    const sealObj = db.precintos.find(p => p.id === c.precinto);
-    const seal = sealObj ? sealObj.numero_precinto : "Precinto Eliminado";
-    
-    const ownerObj = db.usuarios.find(u => u.id === c.usuario);
-    const owner = ownerObj ? ownerObj.nombre : "Usuario Eliminado";
-    
+    const seal = db.precintos.find(p => p.id === c.precinto)?.numero_precinto || "Precinto Eliminado";
+    const owner = db.usuarios.find(u => u.id === c.usuario)?.nombre || "Usuario Eliminado";
     return `${seal} ${owner} ${c.coto} ${c.estado}`.toLowerCase().includes(search.toLowerCase());
   });
+
+  // Extraer el límite del primer cazador para pintar la casilla del administrador
+  const limiteMensualVisual = db.usuarios.find(u => u.rol === 'cazador')?.maximo_dias_mes || 10;
 
   return React.createElement(Shell, { user: user, onLogout: salir }, 
     React.createElement("section", { className: "mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" }, 
@@ -715,23 +586,6 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
       React.createElement(Metric, { label: "Usuarios conectados", value: stats.conectados })
     ), 
 
-    // MEJORA: Tarjeta/Panel de control global permanente para el Administrador para setear el cupo mensual
-    React.createElement("div", { className: "mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-soft" },
-      React.createElement("h3", { className: "text-sm font-bold text-amber-900" }, "⚙️ Configuración del Coto (Reglas de Temporada)"),
-      React.createElement("div", { className: "mt-2 flex flex-col items-start gap-4 sm:flex-row sm:items-center" },
-        React.createElement("label", { className: "flex items-center gap-3 text-sm text-amber-950 font-semibold" },
-          "Máximo de días / salidas permitidas por cazador al mes:",
-          React.createElement("input", {
-            type: "number",
-            min: "1",
-            value: db.configuracion?.maximo_dias_mes || 10,
-            onChange: e => cambiarMaximoDiasMes(e.target.value),
-            className: "h-9 w-24 rounded border border-amber-300 bg-white px-2 text-center font-bold text-slate-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-100"
-          })
-        )
-      )
-    ),
-
     React.createElement("div", { className: "mb-5 flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 scrollbar-thin" }, 
       [["usuarios", "users", "Usuarios"], ["precintos", "badge", "Precintos"], ["capturas", "camera", "Capturas"], ["datos", "database", "Base de datos"], ["estadisticas", "bar-chart-3", "Estadísticas"]].map(([key, icon, label]) => React.createElement("button", {
         key: key,
@@ -739,7 +593,23 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
         className: `inline-flex h-10 shrink-0 items-center gap-2 rounded px-3 text-sm font-bold ${tab === key ? "bg-forest-700 text-white" : "text-slate-600 hover:bg-slate-100"}`
       }, React.createElement(Icon, { name: icon, className: "h-4 w-4" }), label))
     ), 
+    
     tab === "usuarios" && React.createElement(Panel, { title: "Gestión de usuarios" }, 
+      // NUEVO: Panel de Reglas de Temporada perfectamente sincronizado
+      React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4" }, 
+        React.createElement("h3", { className: "text-md font-bold text-slate-700 flex items-center gap-2" }, "⚙️ Configuración del Coto (Reglas de Temporada)"),
+        React.createElement("p", { className: "text-xs text-slate-500 mt-1" }, "Establece el número máximo de salidas permitidas para los cazadores en el mes actual."),
+        React.createElement("div", { className: "mt-3 flex items-center gap-4 max-w-xs" },
+          React.createElement("input", {
+            type: "number",
+            value: limiteMensualVisual,
+            onChange: e => cambiarLimiteMensualGlobal(e.target.value),
+            className: "h-11 w-24 text-center rounded border border-slate-300 font-bold bg-white"
+          }),
+          React.createElement("span", { className: "text-sm font-semibold text-slate-600" }, "días / salidas al mes")
+        )
+      ),
+
       React.createElement("form", { onSubmit: createUser, className: "mb-5 grid gap-3 lg:grid-cols-[1fr_0.8fr_0.8fr_160px_140px]" }, 
         React.createElement(Input, { placeholder: "Nombre", value: newUser.nombre, onChange: v => setNewUser({ ...newUser, nombre: v }) }), 
         React.createElement(Input, { placeholder: "Usuario", value: newUser.usuario, onChange: v => setNewUser({ ...newUser, usuario: v }) }), 
@@ -754,13 +624,13 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
         ), 
         React.createElement("button", { className: "rounded bg-forest-700 px-4 font-bold text-white" }, "Crear")
       ), 
-      React.createElement(Table, { headers: ["Nombre", "Usuario", "Rol", "Estado", "Historial", "Acción"] }, 
+      React.createElement(Table, { headers: ["Nombre", "Usuario", "Rol", "Límite Mes", "Estado", "Acción"] }, 
         db.usuarios.map(u => React.createElement("tr", { key: u.id, className: "border-t border-slate-100" }, 
           React.createElement(Td, null, u.nombre), 
           React.createElement(Td, null, u.usuario), 
           React.createElement(Td, null, u.rol), 
+          React.createElement(Td, null, u.rol === 'cazador' ? `${u.maximo_dias_mes || 10} días` : "—"), 
           React.createElement(Td, null, React.createElement(Badge, { tone: u.bloqueado ? "BLOQUEADO" : "DISPONIBLE" }, u.bloqueado ? "BLOQUEADO" : "ACTIVO")), 
-          React.createElement(Td, null, db.logs.filter(l => l.usuario === u.usuario).length, " eventos"), 
           React.createElement(Td, null, React.createElement("button", {
             onClick: () => toggleUser(u.id),
             className: "rounded border border-slate-200 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50"
@@ -813,12 +683,13 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
       React.createElement("div", { className: "mb-5 flex flex-wrap gap-2" }, 
         React.createElement(ExportButton, { label: "Exportar CSV", data: db }), 
         React.createElement("button", {
+          type: "button",
           onClick: () => alert("Copia automática programada cada 24 horas."),
           className: "inline-flex h-10 items-center gap-2 rounded border border-slate-200 px-3 text-sm font-bold hover:bg-slate-50"
         }, React.createElement(Icon, { name: "archive", className: "h-4 w-4" }), " Copias automáticas")
       ), 
       React.createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, 
-        ["usuarios", "precintos", "capturas", "logs", "configuracion"].map(key => React.createElement("div", { key: key, className: "rounded border border-slate-200 p-4" }, 
+        ["usuarios", "precintos", "capturas", "logs"].map(key => React.createElement("div", { key: key, className: "rounded border border-slate-200 p-4" }, 
           React.createElement("h3", { className: "mb-2 font-bold capitalize" }, key), 
           React.createElement("pre", { className: "max-h-72 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100 scrollbar-thin" }, 
             JSON.stringify(db[key], null, 2)
@@ -828,24 +699,13 @@ React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200
     ), 
     tab === "estadisticas" && React.createElement(Panel, { title: "Estadísticas" }, 
       React.createElement("div", { className: "grid gap-5 lg:grid-cols-2" }, 
-        React.createElement(Chart, {
-          title: "Capturas por coto",
-          rows: COTOS.map(coto => ({
-            label: coto,
-            value: db.capturas.filter(c => c.coto === coto).length
-          }))
-        }), 
+        React.createElement(Chart, { title: "Capturas por coto", rows: COTOS.map(coto => ({ label: coto, value: db.capturas.filter(c => c.coto === coto).length })) }), 
         React.createElement(Chart, { title: "Uso diario", rows: dailyRows(db) }), 
-        React.createElement(Chart, {
-          title: "Precintos activos",
-          rows: [{ label: "Asignados", value: stats.asignados }, { label: "Disponibles", value: stats.disponibles }, { label: "Usados", value: stats.usados }]
-        }), 
+        React.createElement(Chart, { title: "Precintos activos", rows: [{ label: "Asignados", value: stats.asignados }, { label: "Disponibles", value: stats.disponibles }, { label: "Usados", value: stats.usados }] }), 
         React.createElement("div", { className: "rounded border border-slate-200 p-4" }, 
           React.createElement("h3", { className: "mb-3 font-bold" }, "Últimas operaciones"), 
           React.createElement("div", { className: "space-y-2" }, 
-            db.logs.slice(0, 6).map(l => React.createElement("p", { key: l.id, className: "rounded bg-slate-50 px-3 py-2 text-sm" }, 
-              l.accion, " · ", formatDate(l.fecha)
-            ))
+            db.logs.slice(0, 6).map(l => React.createElement("p", { key: l.id, className: "rounded bg-slate-50 px-3 py-2 text-sm" }, l.accion, " · ", formatDate(l.fecha)))
           )
         )
       )
@@ -936,10 +796,7 @@ function Chart({ title, rows }) {
           React.createElement("strong", null, r.value)
         ), 
         React.createElement("div", { className: "h-3 rounded bg-slate-100" }, 
-          React.createElement("div", {
-            className: "h-3 rounded bg-forest-700",
-            style: { width: `${(r.value / max) * 100}%` }
-          })
+          React.createElement("div", { className: "h-3 rounded bg-forest-700", style: { width: `${(r.value / max) * 100}%` } })
         )
       ))
     )
@@ -992,7 +849,6 @@ function App() {
   useEffect(() => {
     async function inicializarApp() {
       if (!navigator.onLine) {
-        console.warn("📱 Iniciando en modo offline. Cargando copia local.");
         const local = localStorage.getItem("precinto-db");
         if (local) setDbState(JSON.parse(local));
         setLoading(false);
@@ -1001,7 +857,6 @@ function App() {
 
       try {
         setLoadingMessage("Conectando con el servidor seguro de Render... 📡");
-        
         const timerAviso = setTimeout(() => {
           setLoadingMessage("Despertando el servidor remoto... Esto puede tardar unos 40 segundos la primera vez ⏳");
         }, 3500);
@@ -1013,13 +868,21 @@ function App() {
           const data = await respuesta.json();
           if (data && data.usuarios) {
             setDbState(data);
-            console.log("✅ Conexión con el servidor completada con éxito.");
+            
+            // Sincronizar también la sesión del usuario actual por si cambió su límite
+            if (user) {
+              const actualizado = data.usuarios.find(u => u.id === user.id);
+              if (actualizado) {
+                setUser(actualizado);
+                localStorage.setItem("usuario-sesion", JSON.stringify(actualizado));
+              }
+            }
           }
         } else {
-          throw new Error("Respuesta incorrecta del servidor");
+          throw new Error("Respuesta incorrecta");
         }
       } catch (error) {
-        console.error("No se pudo conectar al servidor, usando respaldo local:", error);
+        console.error("Usando respaldo local:", error);
         const local = localStorage.getItem("precinto-db");
         if (local) setDbState(JSON.parse(local));
       } finally {
@@ -1030,28 +893,10 @@ function App() {
     inicializarApp();
   }, []);
 
-  useEffect(() => {
-    function comprobarYSubir() {
-      console.log("🌐 ¡Conexión recuperada! Comprobando capturas pendientes...");
-      const localData = localStorage.getItem("precinto-db");
-      if (localData) {
-        const parsedData = JSON.parse(localData);
-        const tieneFotosPendientes = parsedData.capturas?.some(c => c.imagen && c.imagen.includes('data:image'));
-        if (tieneFotosPendientes) {
-          console.log("📤 Subiendo automáticamente las capturas acumuladas sin señal...");
-          setDb(parsedData);
-        }
-      }
-    }
-    window.addEventListener('online', comprobarYSubir);
-    return () => window.removeEventListener('online', comprobarYSubir);
-  }, [db]);
-
   function setDb(next) {
     setDbState(next);
 
     if (!navigator.onLine) {
-      console.warn("⚠️ Dispositivo offline. Conservando imagen en local hasta recuperar cobertura.");
       localStorage.setItem("precinto-db", JSON.stringify(next));
       return;
     }
@@ -1064,10 +909,7 @@ function App() {
       body: JSON.stringify(next)
     })
     .then(res => {
-      if (!res.ok) {
-        console.error("Error al guardar en el servidor remoto");
-      } else {
-        console.log("✅ Sincronizado con éxito en la base de datos");
+      if (res.ok) {
         const dbOptimizada = { ...next };
         if (dbOptimizada.capturas && dbOptimizada.capturas.length > 0) {
           dbOptimizada.capturas = dbOptimizada.capturas.map(c => {
@@ -1081,18 +923,16 @@ function App() {
       }
     })
     .catch(err => {
-      console.error("Fallo de red en el envío. Respaldando en el móvil:", err);
       localStorage.setItem("precinto-db", JSON.stringify(next));
     });
   }
 
   if (loading) {
-    return React.createElement("main", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-950 p-6 text-white text-center animate-fade-in" },
+    return React.createElement("main", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-950 p-6 text-white text-center" },
       React.createElement("div", { className: "mb-6 grid h-20 w-20 place-items-center rounded-full bg-white/10 text-emerald-400" },
         React.createElement(Icon, { name: "shield-check", className: "h-12 w-12" })
       ),
-      React.createElement("h2", { className: "text-2xl font-black tracking-tight" }, "Sistema Precinto Digital"),
-      React.createElement("p", { className: "text-emerald-200/60 text-xs font-semibold uppercase tracking-wider mt-1" }, "Control Cinegético Profesional"),
+      React.createElement("h2", { className: "text-2xl font-black" }, "Sistema Precinto Digital"),
       React.createElement("div", { className: "my-8 h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-white" }),
       React.createElement("p", { className: "max-w-xs text-sm font-medium text-emerald-100/90" }, loadingMessage)
     );
