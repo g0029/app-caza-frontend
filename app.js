@@ -560,13 +560,29 @@ function AdminArea({ user, db, setDb }) {
     setNewSeal("");
   }
 
+  // Reemplaza esta función dentro de AdminArea en tu app.js
   function removeSeal(id) {
     const seal = db.precintos.find(p => p.id === id);
     if (!seal) return;
-    if (seal.estado !== "DISPONIBLE") return alert(`No se puede eliminar porque está ${seal.estado}.`);
+    
+    // Control de seguridad obligatorio
+    if (seal.estado !== "DISPONIBLE") {
+      return alert(`No puedes eliminar este precinto porque su estado actual es: ${seal.estado}.`);
+    }
 
-    const next = { ...db, precintos: db.precintos.filter(p => p.id !== id) };
-    setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado`));
+    // Confirmación al administrador
+    if (!confirm(`¿Estás seguro de que deseas eliminar el precinto ${seal.numero_precinto}?`)) {
+      return;
+    }
+
+    // Filtramos eliminando el registro del estado
+    const next = { 
+      ...db, 
+      precintos: db.precintos.filter(p => p.id !== id) 
+    };
+    
+    // Guardamos y disparamos el POST sincronizado de inmediato
+    setDb(addLog(next, `Precinto ${seal.numero_precinto} eliminado permanentemente del stock`));
   }
 
   const filteredCaptures = db.capturas.filter(c => {
