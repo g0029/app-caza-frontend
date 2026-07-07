@@ -327,7 +327,16 @@ function UserArea({ user, db, setDb }) {
   function requestSeal(event) {
     event.preventDefault();
     if (!pickup.paraje.trim()) return setMessage({ type: "error", text: "El paraje es obligatorio por seguridad." });
-    
+    // Dentro de la función requestSeal en UserArea:
+const salidasEsteMes = db.asignaciones.filter(a => a.usuario === user.id && a.estado === "USADO").length; 
+const limiteCazador = user.maximo_dias_mes || 10;
+
+if (salidasEsteMes >= limiteCazador) {
+  return setMessage({ 
+    type: "error", 
+    text: `No puedes solicitar más precintos. Has alcanzado tu límite máximo de ${limiteCazador} salidas este mes.` 
+  });
+}
     // CAMBIADO: Reemplazado el bloqueo de "1 activo" por la validación del cupo mensual dinámico de Supabase
     if (salidasEsteMes >= limiteMensual) {
       return setMessage({ 
@@ -570,7 +579,30 @@ function AdminArea({ user, db, setDb }) {
   const [newSeal, setNewSeal] = useState("");
   const [newSealCoto, setNewSealCoto] = useState(COTOS[0]);
   const [newUser, setNewUser] = useState({ nombre: "", usuario: "", password: "", rol: "cazador" });
-  
+  // Añade esta función dentro de AdminArea para aplicar el cambio a todos los cazadores:
+function cambiarLimiteMensualGlobal(nuevoLimite) {
+  const limiteNumero = parseInt(nuevoLimite) || 10;
+  const next = {
+    ...db,
+    usuarios: db.usuarios.map(u => u.rol === 'cazador' ? { ...u, maximo_dias_mes: limiteNumero } : u)
+  };
+  setDb(addLog(next, `Límite mensual actualizado globalmente a ${limiteNumero} días`));
+}
+
+// Y en la parte visual (JSX) añade esta tarjeta de control:
+React.createElement("div", { className: "mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4" }, 
+  React.createElement("h3", { className: "text-md font-bold text-slate-700 flex items-center gap-2" }, "⚙️ Configuración del Coto (Reglas de Temporada)"),
+  React.createElement("p", { className: "text-xs text-slate-500 mt-1" }, "Establece el número máximo de salidas permitidas para los cazadores en el mes actual."),
+  React.createElement("div", { className: "mt-3 flex items-center gap-4 max-w-xs" },
+    React.createElement("input", {
+      type: "number",
+      value: db.usuarios.find(u => u.rol === 'cazador')?.maximo_dias_mes || 10,
+      onChange: e => cambiarLimiteMensualGlobal(e.target.value),
+      className: "h-10 w-24 text-center rounded border border-slate-300 font-bold"
+    }),
+    React.createElement("span", { className: "text-sm font-semibold text-slate-600" }, "días / salidas al mes")
+  )
+)
   const stats = useMemo(() => ({
     disponibles: db.precintos.filter(p => p.estado === "DISPONIBLE").length,
     asignados: db.precintos.filter(p => p.estado === "ASIGNADO").length,
